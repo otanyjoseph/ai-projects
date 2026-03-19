@@ -1,0 +1,180 @@
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  .cb-page {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f5f0;
+    padding: 48px 40px 60px;
+    color: #1a1a1a;
+    width: 100%;
+  }
+
+  .cb-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid #d0d0c8;
+    padding-bottom: 20px;
+    margin-bottom: 16px;
+  }
+
+  .cb-title {
+    font-size: clamp(22px, 3vw, 40px);
+    font-weight: 300;
+    letter-spacing: -1px;
+    line-height: 1.1;
+  }
+
+  .cb-title strong { font-weight: 700; }
+
+  .cb-meta {
+    text-align: right;
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.5px;
+    line-height: 2;
+  }
+
+  .cb-meta .cb-count {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a1a1a;
+    display: block;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  .cb-subtitle {
+    font-size: 11px;
+    color: #999;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .cb-grid {
+    display: grid;
+    grid-template-columns: repeat(25, 1fr);
+    gap: 3px;
+    width: 100%;
+  }
+
+  .cb-cell {
+    aspect-ratio: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cb-cell input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 100%;
+    border: 1px solid #c8c8c0;
+    border-radius: 2px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.1s, background 0.1s, transform 0.1s;
+    display: block;
+  }
+
+  .cb-cell input[type="checkbox"]:hover {
+    border-color: #1a1a1a;
+    transform: scale(1.2);
+  }
+
+  .cb-cell input[type="checkbox"]:checked {
+    background: #1a1a1a;
+    border-color: #1a1a1a;
+  }
+
+  .cb-footer-note {
+    margin-top: 20px;
+    font-size: 11px;
+    color: #aaa;
+    letter-spacing: 0.5px;
+    border-top: 1px solid #d0d0c8;
+    padding-top: 16px;
+  }
+</style>
+
+<div class="cb-page">
+  <div class="cb-header">
+    <div class="cb-title">25x25<br><strong>Checkboxes</strong></div>
+    <div class="cb-meta">
+      <span class="cb-count" id="cbCount">0</span>
+      checked by visitors
+    </div>
+  </div>
+  <div class="cb-subtitle">25 × 25 · shared · anyone can check or uncheck</div>
+  <div class="cb-grid" id="cbGrid"></div>
+  <div class="cb-footer-note">Changes are visible to all visitors. Click any box to toggle.</div>
+</div>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js';
+  import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js';
+
+  const app = initializeApp({
+    apiKey: "AIzaSyDnz3P4iBNDv-UGHI9BZJkHWbUeaKUowgM",
+    authDomain: "project-feel-19481.firebaseapp.com",
+    databaseURL: "https://project-feel-19481-default-rtdb.firebaseio.com",
+    projectId: "project-feel-19481",
+    storageBucket: "project-feel-19481.firebasestorage.app",
+    messagingSenderId: "329423801276",
+    appId: "1:329423801276:web:7e8d2867c04c088cb2f9b9"
+  });
+
+  const db = getDatabase(app);
+  const checkboxRef = ref(db, 'checkboxes');
+
+  const TOTAL = 625;
+  let state = new Array(TOTAL).fill(false);
+  let checkboxEls = [];
+  let built = false;
+
+  function updateCount() {
+    document.getElementById('cbCount').textContent = state.filter(Boolean).length.toLocaleString();
+  }
+
+  function buildGrid() {
+    const grid = document.getElementById('cbGrid');
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < TOTAL; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cb-cell';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = state[i];
+      checkboxEls.push(cb);
+      cell.appendChild(cb);
+      cell.addEventListener('click', () => {
+        state[i] = !state[i];
+        cb.checked = state[i];
+        updateCount();
+        set(checkboxRef, state);
+      });
+      frag.appendChild(cell);
+    }
+    grid.appendChild(frag);
+    built = true;
+    updateCount();
+  }
+
+  onValue(checkboxRef, (snapshot) => {
+    const data = snapshot.val();
+    if (Array.isArray(data) && data.length === TOTAL) {
+      state = data;
+      if (!built) {
+        buildGrid();
+      } else {
+        checkboxEls.forEach((cb, i) => cb.checked = state[i]);
+        updateCount();
+      }
+    } else {
+      if (!built) buildGrid();
+    }
+  });
+</script>
