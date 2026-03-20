@@ -61,11 +61,9 @@
     cursor: default;
     display: block;
     box-shadow: 4px 4px 0px #1a1a1a;
-    width: 100%;
-    height: auto;
   }
 
-  #reset-btn {
+  #reset-btn, #mute-btn {
     font-family: 'DM Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.2em;
@@ -78,8 +76,10 @@
     box-shadow: 3px 3px 0px #1a1a1a;
     transition: box-shadow 0.1s, transform 0.1s;
   }
-  #reset-btn:hover { box-shadow: 1px 1px 0px #1a1a1a; transform: translate(2px, 2px); }
-  #reset-btn:active { box-shadow: none; transform: translate(3px, 3px); }
+  #reset-btn:hover, #mute-btn:hover { box-shadow: 1px 1px 0px #1a1a1a; transform: translate(2px, 2px); }
+  #reset-btn:active, #mute-btn:active { box-shadow: none; transform: translate(3px, 3px); }
+  #mute-btn { padding: 8px 14px; font-size: 16px; letter-spacing: 0; }
+  .btn-row { display: flex; gap: 10px; align-items: center; }
 
   .footer {
     font-size: 10px;
@@ -96,7 +96,10 @@
     <div class="counts" id="counts">⚪ 0 &nbsp; 📄 0 &nbsp; ✂️ 0</div>
   </div>
   <canvas id="game-canvas"></canvas>
-  <button id="reset-btn" onclick="restartGame()">restart</button>
+  <div class="btn-row">
+    <button id="reset-btn" onclick="restartGame()">restart</button>
+    <button id="mute-btn" onclick="toggleMute()" title="Toggle sound">🔇</button>
+  </div>
   <div class="footer">watch · wait · winner</div>
 </div>
 
@@ -124,6 +127,32 @@ let elements = [];
 let winner = null;
 let animId = null;
 
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTick() {
+  if (muted) return;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.02, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.005));
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.18;
+  src.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start();
+}
+
+let muted = true;
+
+function toggleMute() {
+  muted = !muted;
+  if (!muted) audioCtx.resume();
+  document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊';
+}
+
 function initializeElements() {
   elements = [];
   for (let i = 0; i < NUM; i++) {
@@ -140,8 +169,8 @@ function initializeElements() {
 
 function handleCollision(a, b) {
   const beat = (t1, t2) => (t1 === ROCK && t2 === SCISSORS) || (t1 === SCISSORS && t2 === PAPER) || (t1 === PAPER && t2 === ROCK);
-  if (beat(a.type, b.type)) b.type = a.type;
-  else if (beat(b.type, a.type)) a.type = b.type;
+  if (beat(a.type, b.type)) { b.type = a.type; playTick(); }
+  else if (beat(b.type, a.type)) { a.type = b.type; playTick(); }
 }
 
 function updateCounts() {
