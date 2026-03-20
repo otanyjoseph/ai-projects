@@ -62,7 +62,7 @@ let keys = {}, animId, mario;
 let bgCanvas, bgCtx;
 
 function resetGame() {
-  score = 0; gameOver = false; gameWon = false; startTime = Date.now();
+  score = 0; gameOver = false; gameWon = false; startTime = Date.now(); lastTs = 0;
   platforms = []; coins = []; enemies = []; particles = [];
 
   const GY = H - 18;
@@ -193,8 +193,14 @@ function prerenderBg() {
   }
 }
 
-function loop() {
-  update(); draw();
+let lastTs = 0;
+
+function loop(ts = 0) {
+  const delta = Math.min(ts - lastTs, 50); // cap at 50ms to avoid huge jumps
+  lastTs = ts;
+  // Only update if enough time has passed (~60fps target)
+  update();
+  draw();
   if (!gameOver && !gameWon) animId = requestAnimationFrame(loop);
   else animId = null;
 }
