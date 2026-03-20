@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPS Battle</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f5f2ee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 1000px;
+    max-width: 860px;
+    margin: 0 auto;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 24px 40px;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid #d0d0c8;
+    padding-bottom: 12px;
+    width: 100%;
+  }
+
+  .title {
+    font-size: 22px;
+    font-weight: 300;
+    letter-spacing: -1px;
+    color: #1a1a1a;
+  }
+  .title strong { font-weight: 700; }
+
+  .counts {
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.5px;
+    text-align: right;
+    line-height: 1.8;
+  }
+
+  #game-canvas {
+    background: #fff;
+    border: 1.5px solid #1a1a1a;
+    cursor: default;
+    display: block;
+    box-shadow: 4px 4px 0px #1a1a1a;
+    width: 100%;
+    height: auto;
+  }
+
+  #reset-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    background: #fff;
+    color: #1a1a1a;
+    border: 1.5px solid #1a1a1a;
+    padding: 8px 28px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0px #1a1a1a;
+    transition: box-shadow 0.1s, transform 0.1s;
+  }
+  #reset-btn:hover { box-shadow: 1px 1px 0px #1a1a1a; transform: translate(2px, 2px); }
+  #reset-btn:active { box-shadow: none; transform: translate(3px, 3px); }
+
+  .footer {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: #ccc;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">RPS<br><strong>Battle</strong></div>
+    <div class="counts" id="counts">⚪ 0 &nbsp; 📄 0 &nbsp; ✂️ 0</div>
+  </div>
+  <canvas id="game-canvas"></canvas>
+  <button id="reset-btn" onclick="restartGame()">restart</button>
+  <div class="footer">watch · wait · winner</div>
+</div>
+
+<script>
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+const W = Math.min(window.innerWidth - 80, 780);
+const H = Math.round(W * 0.9);
+canvas.width = W;
+canvas.height = H;
+
+const NUM = 40;
+const SIZE = 22;
+const SPEED = 1;
+const ROCK = 0, PAPER = 1, SCISSORS = 2;
+const EMOJIS = ['🪨', '📄', '✂️'];
+
+let elements = [];
+let winner = null;
+let animId = null;
+
+function initializeElements() {
+  elements = [];
+  for (let i = 0; i < NUM; i++) {
+    elements.push({
+      x: SIZE + Math.random() * (W - SIZE * 2),
+      y: SIZE + Math.random() * (H - SIZE * 2),
+      type: i % 3,
+      vx: (Math.random() - 0.5) * SPEED,
+      vy: (Math.random() - 0.5) * SPEED,
+    });
+  }
+  winner = null;
+}
+
+function handleCollision(a, b) {
+  const beat = (t1, t2) => (t1 === ROCK && t2 === SCISSORS) || (t1 === SCISSORS && t2 === PAPER) || (t1 === PAPER && t2 === ROCK);
+  if (beat(a.type, b.type)) b.type = a.type;
+  else if (beat(b.type, a.type)) a.type = b.type;
+}
+
+function updateCounts() {
+  const r = elements.filter(e => e.type === ROCK).length;
+  const p = elements.filter(e => e.type === PAPER).length;
+  const s = elements.filter(e => e.type === SCISSORS).length;
+  document.getElementById('counts').innerHTML = `🪨 ${r} &nbsp; 📄 ${p} &nbsp; ✂️ ${s}`;
+}
+
+function checkWinner() {
+  const types = new Set(elements.map(e => e.type));
+  if (types.size === 1) {
+    winner = ['ROCK 🪨', 'PAPER 📄', 'SCISSORS ✂️'][[...types][0]];
+    return true;
+  }
+  return false;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+
+    el.x += el.vx;
+    el.y += el.vy;
+
+    // Bounce off walls
+    if (el.x < SIZE / 2) { el.x = SIZE / 2; el.vx = Math.abs(el.vx); }
+    if (el.x > W - SIZE / 2) { el.x = W - SIZE / 2; el.vx = -Math.abs(el.vx); }
+    if (el.y < SIZE / 2) { el.y = SIZE / 2; el.vy = Math.abs(el.vy); }
+    if (el.y > H - SIZE / 2) { el.y = H - SIZE / 2; el.vy = -Math.abs(el.vy); }
+
+    // Check collisions
+    for (let j = i + 1; j < elements.length; j++) {
+      const other = elements[j];
+      const dx = other.x - el.x;
+      const dy = other.y - el.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < SIZE * SIZE) {
+        handleCollision(el, other);
+        // Slight push apart
+        const angle = Math.atan2(dy, dx);
+        const ax = Math.cos(angle) * 0.5;
+        const ay = Math.sin(angle) * 0.5;
+        el.vx -= ax; el.vy -= ay;
+        other.vx += ax; other.vy += ay;
+        // Clamp speed
+        const clamp = (v) => Math.max(-SPEED * 1.5, Math.min(SPEED * 1.5, v));
+        el.vx = clamp(el.vx); el.vy = clamp(el.vy);
+        other.vx = clamp(other.vx); other.vy = clamp(other.vy);
+      }
+    }
+
+    // Draw emoji
+    ctx.font = `${SIZE}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(EMOJIS[el.type], el.x, el.y);
+  }
+
+  updateCounts();
+
+  if (checkWinner()) {
+    // Winner overlay
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = `700 32px DM Serif Display, serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${winner} wins!`, W / 2, H / 2);
+    return; // stop loop
+  }
+
+  animId = requestAnimationFrame(draw);
+}
+
+function restartGame() {
+  if (animId) cancelAnimationFrame(animId);
+  initializeElements();
+  animId = requestAnimationFrame(draw);
+}
+
+restartGame();
+</script>
+</body>
+</html>
