@@ -124,7 +124,7 @@ function resetGame() {
 
   prerenderBg();
   document.getElementById('info').textContent = 'score: 0  |  time: 0s';
-  if (animId) cancelAnimationFrame(animId);
+  if (animId) { cancelAnimationFrame(animId); animId = null; }
   loop();
 }
 
@@ -196,6 +196,7 @@ function prerenderBg() {
 function loop() {
   update(); draw();
   if (!gameOver && !gameWon) animId = requestAnimationFrame(loop);
+  else animId = null;
 }
 
 function update() {
@@ -490,6 +491,19 @@ document.addEventListener('keydown', e => {
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
 });
 document.addEventListener('keyup', e => { keys[e.code]=false; });
+
+// Pause when iframe loses focus, resume when it regains it
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (animId) { cancelAnimationFrame(animId); animId = null; }
+  } else {
+    if (!gameOver && !gameWon && !animId) animId = requestAnimationFrame(loop);
+  }
+});
+
+window.addEventListener('blur', () => {
+  keys = {}; // clear held keys so mario doesn't keep moving
+});
 
 resetGame();
 </script>
