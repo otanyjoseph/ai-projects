@@ -106,8 +106,13 @@ const ctx = canvas.getContext('2d');
 
 const W = Math.min(window.innerWidth - 80, 780);
 const H = Math.round(W * 0.9);
-canvas.width = W;
-canvas.height = H;
+
+const dpr = window.devicePixelRatio || 1;
+canvas.width = W * dpr;
+canvas.height = H * dpr;
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+ctx.scale(dpr, dpr);
 
 const NUM = 40;
 const SIZE = 22;
