@@ -111,7 +111,7 @@ canvas.height = H;
 
 const NUM = 40;
 const SIZE = 22;
-const SPEED = 4;
+const SPEED = 6;
 const ROCK = 0, PAPER = 1, SCISSORS = 2;
 const EMOJIS = ['🪨', '📄', '✂️'];
 
@@ -187,7 +187,7 @@ function draw() {
         el.vx -= ax; el.vy -= ay;
         other.vx += ax; other.vy += ay;
         // Clamp speed
-        const clamp = (v) => Math.max(-SPEED * 1.5, Math.min(SPEED * 1.5, v));
+        const clamp = (v) => Math.max(-SPEED * 2, Math.min(SPEED * 2, v));
         el.vx = clamp(el.vx); el.vy = clamp(el.vy);
         other.vx = clamp(other.vx); other.vy = clamp(other.vy);
       }
