@@ -661,9 +661,24 @@ function initHandTracking() {
     document.getElementById('loading').classList.add('hidden');
     showReadyScreen();
   }).catch((err) => {
-    document.getElementById('status-icon').textContent = '❌';
-    document.getElementById('status-text').textContent = 'Camera Error';
-    document.getElementById('status-sub').textContent = err.message || 'Could not access camera';
+    const loading = document.getElementById('loading');
+    loading.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px;text-align:center;">
+        <div style="font-size:64px;color:#ff4444;">&#10005;</div>
+        <div style="color:#fff;font-size:22px;letter-spacing:3px;text-transform:uppercase;font-weight:bold;">Camera Error</div>
+        <div style="color:rgba(255,255,255,0.45);font-size:13px;letter-spacing:2px;text-transform:uppercase;">Permission Denied</div>
+        <div style="color:rgba(255,255,255,0.35);font-size:12px;max-width:300px;line-height:1.6;margin-top:8px;">
+          Camera access is blocked in embedded frames. Open the game directly for the full AR experience.
+        </div>
+        <a href="https://otanyjoseph.github.io/ai-projects/finger-tracking-fruit-ninja.html"
+          target="_blank"
+          style="margin-top:16px;padding:16px 36px;background:linear-gradient(135deg,#06D6A0,#4CC9F0);color:#000;font-size:15px;font-weight:900;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border-radius:50px;box-shadow:0 0 30px rgba(6,214,160,0.5);display:inline-block;"
+          onmouseover="this.style.transform='scale(1.05)'"
+          onmouseout="this.style.transform='scale(1)'"
+        >&#127918; Open Full Experience &#8594;</a>
+        <div style="color:rgba(255,255,255,0.2);font-size:11px;letter-spacing:1px;margin-top:4px;">OPENS IN NEW TAB</div>
+      </div>
+    `;
   });
 }
 
