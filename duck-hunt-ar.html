@@ -777,6 +777,7 @@ function initHandTracking(){
     state='ready';
   }).catch(err=>{
     console.error(err);
+    document.body.style.cursor='auto';
     document.getElementById('loading').innerHTML=`
       <div class="nes-box" style="text-align:center;padding:32px 40px;max-width:520px;margin:24px;">
         <div class="nes-title">DUCK HUNT AR</div>
