@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Duck Hunt AR</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:monospace;cursor:none}
+#container{position:relative;width:100vw;height:100vh}
+#gameCanvas{position:absolute;inset:0;width:100%;height:100%}
+#video{
+  position:absolute;right:16px;bottom:16px;
+  width:196px;height:148px;object-fit:cover;
+  transform:scaleX(-1);opacity:0;transition:opacity .3s;
+  border:4px solid #f8f8f8;
+  box-shadow:0 0 0 3px #000,0 0 0 6px #6a6a6a;
+  z-index:10;image-rendering:pixelated;
+}
+#video.show{opacity:.92}
+#camLabel{
+  position:absolute;right:16px;bottom:168px;z-index:11;
+  background:#000;color:#f8f8f8;border:3px solid #555;
+  padding:2px 8px;font-size:9px;letter-spacing:2px;
+}
+#loading{
+  position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;background:#78a8f0;z-index:20;transition:opacity .5s;
+}
+#loading.hidden{opacity:0;pointer-events:none}
+.nes-box{
+  background:#000;color:#fff;border:4px solid #f8f8f8;
+  padding:28px 40px;text-align:center;
+  box-shadow:inset -4px -4px 0 #555,inset 4px 4px 0 #fff,8px 8px 0 rgba(0,0,0,.4);
+}
+.nes-title{font-size:32px;letter-spacing:4px;color:#fcd000;margin-bottom:12px;text-shadow:3px 3px 0 #d82800}
+.nes-sub{font-size:12px;letter-spacing:2px;color:#aaa;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+</style>
+</head>
+<body>
+<div id="container">
+  <canvas id="gameCanvas"></canvas>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="camLabel">LIVE CAM</div>
+  <div id="loading">
+    <div class="nes-box">
+      <div class="nes-title">DUCK HUNT AR</div>
+      <div id="load-status" class="nes-sub">STARTING CAMERA...</div>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+const video  = document.getElementById('video');
+function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
+
+// ── NES Palette ───────────────────────────────────────────────────────────────
+const C = {
+  sky:'#78a8f0', cloud:'#f8f8f8',
+  grass:'#98d800', grassDark:'#4a7a00', grassTip:'#c8f800',
+  ground:'#9a8600', groundDark:'#000',
+  treeLeaf:'#98d800', treeLeafDark:'#4e7a00',
+  trunk:'#9c4a00', trunkDark:'#6c2c00',
+  white:'#f8f8f8', black:'#000',
+  orange:'#fc7460', yellow:'#fcd000',
+  red:'#d82800', grey:'#6a6a6a',
+  hudBg:'#000', hudBorder:'#98d800',
+};
+
+// ── Game State ────────────────────────────────────────────────────────────────
+const BULLETS = 3;
+let state = 'loading';
+let score=0, round=1, ducksHit=0, ducksMissed=0, bulletsLeft=BULLETS;
+let totalHits=[];
+let ducks=[], shotEffects=[], feathers=[];
+let dogAnim=null, muzzleFlash=0, nextRoundTimer=null;
+
+// ── Smooth Aim ────────────────────────────────────────────────────────────────
+let rawAim={x:-999,y:-999}, smoothAim={x:window.innerWidth/2,y:window.innerHeight/2};
+let aimBuf=[], isGunPose=false, lastSeen=0;
+const DROPOUT_GRACE=500, AIM_LERP=0.22, AIM_BUF=7;
+
+function pushAim(x,y){ aimBuf.push({x,y}); if(aimBuf.length>AIM_BUF) aimBuf.shift(); }
+function stableAim(){
+  if(!aimBuf.length) return {x:smoothAim.x,y:smoothAim.y};
+  return{x:aimBuf.reduce((s,p)=>s+p.x,0)/aimBuf.length,y:aimBuf.reduce((s,p)=>s+p.y,0)/aimBuf.length};
+}
+function updateAim(){
+  if(rawAim.x>-500){
+    // Always smoothly lerp toward raw — whether gun pose or not
+    smoothAim.x+=(rawAim.x-smoothAim.x)*AIM_LERP;
+    smoothAim.y+=(rawAim.y-smoothAim.y)*AIM_LERP;
+    if(isGunPose) pushAim(smoothAim.x,smoothAim.y);
+  }
+  // Never reset smoothAim to -999 — X stays where it was
+}
+
+// ── Thumb Press Detection ─────────────────────────────────────────────────────
+// Palm-local coords so camera angle / wrist tilt don't matter
+let thumbState='unknown', stableCount=0, smoothCurl=0;
+let lastShotTime=0, prevPalmCenter=null, prevPalmAngle=null, openBaseline=null;
+let palmMove=0, rotDelta=0;
+
+// TUNED VALUES — looser thresholds so second shot registers faster
+const OPEN_THRESH   = 0.24;  // thumb must be MORE open than this to arm (raised = easier to arm)
+const CLOSE_THRESH  = 0.48;  // thumb press to fire (lowered = easier to fire)
+const STABLE_FRAMES = 2;     // fewer frames needed to re-arm
+const SHOT_COOLDOWN = 0;     // no cooldown between shots
+const CURL_LERP     = 0.38;  // faster response (was 0.28)
+const MOVE_GATE     = 0.022; // slightly more forgiving movement gate
+const ROT_GATE      = 0.22;
+
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+function vdist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function vnorm(v){const m=Math.hypot(v.x,v.y)||1;return{x:v.x/m,y:v.y/m}}
+function vdot(a,b){return a.x*b.x+a.y*b.y}
+function angleDelta(a,b){let d=a-b;while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;return Math.abs(d)}
+function palmCenter(lm){const pts=[lm[0],lm[5],lm[9],lm[13],lm[17]];return{x:pts.reduce((s,p)=>s+p.x,0)/5,y:pts.reduce((s,p)=>s+p.y,0)/5}}
+function palmAngleF(lm){return Math.atan2(lm[17].y-lm[5].y,lm[17].x-lm[5].x)}
+function projectLocal(pt,origin,ux,uy,scale){const v={x:(pt.x-origin.x)/scale,y:(pt.y-origin.y)/scale};return{x:vdot(v,ux),y:vdot(v,uy)}}
+
+function updateOpenBaseline(lt){
+  if(!openBaseline){openBaseline={radial:Math.hypot(lt.x,lt.y),spread:Math.abs(lt.x)};return}
+  const a=0.22; // slightly faster baseline drift
+  openBaseline.radial+=(Math.hypot(lt.x,lt.y)-openBaseline.radial)*a;
+  openBaseline.spread+=(Math.abs(lt.x)-openBaseline.spread)*a;
+}
+
+function measureThumbPress(lm){
+  const palm=palmCenter(lm);
+  const scale=Math.max(0.0001,vdist(lm[5],lm[17]));
+  const xAxis=vnorm({x:lm[17].x-lm[5].x,y:lm[17].y-lm[5].y});
+  let yAxis=vnorm({x:lm[9].x-lm[0].x,y:lm[9].y-lm[0].y});
+  if(Math.abs(vdot(xAxis,yAxis))>.75) yAxis={x:-xAxis.y,y:xAxis.x};
+  const tl=projectLocal(lm[4],palm,xAxis,yAxis,scale);
+  const radial=Math.hypot(tl.x,tl.y), spread=Math.abs(tl.x);
+  const rotNow=palmAngleF(lm);
+  palmMove=prevPalmCenter?vdist(palm,prevPalmCenter)/scale:0;
+  rotDelta=prevPalmAngle!=null?angleDelta(rotNow,prevPalmAngle):0;
+  prevPalmCenter=palm; prevPalmAngle=rotNow;
+  const stable=palmMove<MOVE_GATE&&rotDelta<ROT_GATE;
+  if((thumbState==='unknown'||thumbState==='armed')&&stable){
+    if(!openBaseline||radial>(openBaseline.radial*0.86)||spread>(openBaseline.spread*0.86))
+      updateOpenBaseline(tl);
+  }
+  const bRad=openBaseline?Math.max(0.18,openBaseline.radial):Math.max(0.18,radial);
+  const bSprd=openBaseline?Math.max(0.12,openBaseline.spread):Math.max(0.12,spread);
+  const pRad=clamp((bRad-radial)/(bRad*0.42),0,1);
+  const pSprd=clamp((bSprd-spread)/(bSprd*0.55),0,1);
+  const rawCurl=pRad*0.65+pSprd*0.35;
+  smoothCurl+=(rawCurl-smoothCurl)*CURL_LERP;
+  return{stable,smoothCurl};
+}
+
+function checkThumbShoot(lm,now){
+  const m=measureThumbPress(lm);
+  // Instant arm — no waiting, no stable frames
+  if(thumbState==='unknown'||thumbState==='fired'){
+    if(m.smoothCurl<OPEN_THRESH) thumbState='armed';
+  }
+  if(thumbState==='armed'){
+    if(m.smoothCurl>CLOSE_THRESH){
+      thumbState='fired';
+      lastShotTime=now;return true;
+    }
+  }
+  // Re-arm the moment thumb opens back up
+  if(thumbState==='fired'&&m.smoothCurl<OPEN_THRESH*0.88){
+    thumbState='armed';
+  }
+  return false;
+}
+
+function detectGunPose(lm){
+  // Palm-local detection — works regardless of hand rotation/tilt angle
+  // Project each fingertip into palm coordinate space and check extension
+  const palm = palmCenter(lm);
+  const scale = Math.max(0.0001, vdist(lm[5], lm[17]));
+
+  // For each finger: measure how far tip is from MCP (knuckle base)
+  // A finger is "extended" if tip is further from palm than mid-knuckle
+  function fingerExtended(tipIdx, midIdx, mcpIdx){
+    const tipDist = vdist(lm[tipIdx], lm[mcpIdx]);
+    const midDist = vdist(lm[midIdx], lm[mcpIdx]);
+    return tipDist > midDist * 1.1; // tip must be further out than mid knuckle
+  }
+  function fingerCurled(tipIdx, mcpIdx){
+    // Curled: tip is close to palm
+    return vdist(lm[tipIdx], palm) / scale < 0.7;
+  }
+
+  const indexExt  = fingerExtended(8,  6,  5);
+  const middleExt = fingerExtended(12, 10, 9);
+  const ringCurl  = fingerCurled(16, 13);
+  const pinkyCurl = fingerCurled(20, 17);
+
+  return indexExt && middleExt && ringCurl && pinkyCurl;
+}
+
+// ── Duck  (DS=7, bigger than before) ─────────────────────────────────────────
+const DS=7;
+class Duck{
+  constructor(){
+    const left=Math.random()<0.5;
+    this.x=left?-120:canvas.width+120;
+    this.y=canvas.height*0.14+Math.random()*canvas.height*0.34;
+    const spd=2.4+round*0.16+Math.random()*1.1;
+    this.vx=(left?1:-1)*spd; this.vy=(Math.random()-.5)*1.5;
+    this.hit=false;this.falling=false;this.dead=false;
+    this.flap=0;this.t=0;this.popup=0;this.fallVy=0;
+    this.escaped=false;this._ec=false;
+    const pals=[
+      {body:'#5a46d6',head:'#e87ab8',beak:'#fc8c30',feet:'#fc8c30',wing:'#f8f8f8'},
+      {body:'#1e6a00',head:'#006800',beak:'#fcd000',feet:'#fc7460',wing:'#f8f8f8'},
+      {body:'#8a3800',head:'#6a2800',beak:'#fc8c30',feet:'#fc8c30',wing:'#f8f8f8'},
+    ];
+    this.pal=pals[Math.floor(Math.random()*pals.length)];
+  }
+  update(){
+    if(this.falling){
+      this.fallVy+=0.45;this.y+=this.fallVy;this.x+=this.vx*0.15;
+      if(this.y>canvas.height+120)this.dead=true;return;
+    }
+    this.t++;if(this.t%6===0)this.flap=(this.flap+1)%2;
+    this.x+=this.vx;this.y+=this.vy;
+    const top=canvas.height*0.05,bot=canvas.height*0.58;
+    if(this.y<top)this.vy=Math.abs(this.vy)+0.3;
+    if(this.y>bot)this.vy=-Math.abs(this.vy)-0.3;
+    if(this.x<-180||this.x>canvas.width+180){this.escaped=true;this.dead=true;}
+    if(this.popup>0)this.popup--;
+  }
+  draw(){
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    if(this.vx<0)ctx.scale(-1,1);
+    if(this.falling)ctx.rotate(Math.PI/2.5);
+    this._px();
+    ctx.restore();
+    if(this.popup>0){
+      ctx.save();ctx.globalAlpha=this.popup/38;
+      ctx.font='bold 24px monospace';ctx.fillStyle=C.yellow;ctx.textAlign='center';
+      ctx.fillText('500',this.x,this.y-58+(38-this.popup)*.6);
+      ctx.restore();
+    }
+  }
+  _px(){
+    const s=DS,p=this.pal;
+    const px=(arr,c)=>{ctx.fillStyle=c;arr.forEach(([x,y])=>ctx.fillRect(x*s,y*s,s,s));};
+    // white belly
+    px([[0,2],[1,2],[2,2],[3,2],[4,2],[1,3],[2,3],[3,3],[4,3],[5,3],[2,4],[3,4],[4,4]],p.wing);
+    // body
+    px([[2,1],[3,1],[4,1],[5,1],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,3],[2,3]],p.body);
+    // wing flap
+    px(this.flap?[[0,1],[1,1],[0,0],[1,0]]:[[0,3],[1,4],[0,4]],p.body);
+    // head
+    px([[6,1],[7,1],[8,1],[6,2],[7,2]],p.head);
+    // beak
+    px([[8,2],[9,2],[9,1]],p.beak);
+    // feet
+    px([[2,5],[3,5]],p.feet);
+    // eye
+    ctx.fillStyle='#000';ctx.fillRect(7*s+1,1*s+1,s-1,s-1);
+    ctx.fillStyle='#f8f8f8';ctx.fillRect(7*s+1,1*s+1,3,3);
+  }
+}
+
+// ── Feather ───────────────────────────────────────────────────────────────────
+class Feather{
+  constructor(x,y){
+    this.x=x;this.y=y;this.vx=(Math.random()-.5)*8;this.vy=-4-Math.random()*5;
+    this.life=1;this.decay=0.018+Math.random()*0.02;
+    this.r=3+Math.random()*6;
+    this.color=[C.white,'#ccc','#aaa',C.yellow][Math.floor(Math.random()*4)];
+    this.rot=Math.random()*Math.PI;this.rs=(Math.random()-.5)*.16;
+  }
+  update(){this.x+=this.vx;this.y+=this.vy;this.vy+=0.18;this.life-=this.decay;this.rot+=this.rs;}
+  draw(){
+    if(this.life<=0)return;
+    ctx.save();ctx.globalAlpha=this.life;ctx.translate(this.x,this.y);ctx.rotate(this.rot);
+    ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(0,0,this.r,this.r*.35,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ── Dog (BIG — matching reference image) ─────────────────────────────────────
+function triggerDog(){
+  const gY=Math.floor(canvas.height*.72);
+  dogAnim={phase:'rise',y:gY+160,timer:0,frame:0};
+}
+function updateDog(){
+  if(!dogAnim)return;
+  const gY=Math.floor(canvas.height*.72);
+  dogAnim.timer++;dogAnim.frame=Math.floor(dogAnim.timer/8)%2;
+  if(dogAnim.phase==='rise'){dogAnim.y-=6;if(dogAnim.y<=gY-160){dogAnim.phase='laugh';dogAnim.timer=0;}}
+  else if(dogAnim.phase==='laugh'){if(dogAnim.timer>160){dogAnim.phase='sink';dogAnim.timer=0;}}
+  else{dogAnim.y+=6;if(dogAnim.y>=gY+180)dogAnim=null;}
+}
+
+function drawDog(){
+  if(!dogAnim)return;
+  const x=canvas.width*.38, y=dogAnim.y;
+  // Scale the dog to be LARGE — filling most of the sky area height
+  const s=7, f=dogAnim.frame;
+  ctx.save(); ctx.translate(x,y);
+
+  const fill=(arr,c)=>{ctx.fillStyle=c;arr.forEach(([px,py])=>ctx.fillRect(px*s,py*s,s,s));};
+
+  // ── Body (brown) ──────────────────────────────────────────────────────────
+  fill([
+    // torso
+    [3,8],[4,8],[5,8],[6,8],[7,8],[8,8],
+    [2,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],
+    [2,10],[3,10],[4,10],[5,10],[6,10],[7,10],[8,10],[9,10],
+    [2,11],[3,11],[4,11],[5,11],[6,11],[7,11],[8,11],[9,11],
+    [3,12],[4,12],[5,12],[6,12],[7,12],[8,12],
+    // arm holding duck (right side, raised)
+    [9,6],[10,6],[11,6],[12,6],
+    [9,7],[10,7],[11,7],
+    [9,8],[10,8],
+    // left arm down
+    [1,9],[2,9],[1,10],[2,10],[1,11],[2,11],
+    // legs
+    [3,13],[4,13],[7,13],[8,13],
+    [3,14],[4,14],[7,14],[8,14],
+    [2,15],[3,15],[4,15],[5,15],[7,15],[8,15],[9,15],[10,15],
+  ],'#a05010');
+
+  // Body highlight
+  fill([
+    [4,9],[5,9],[6,9],[7,9],
+    [4,10],[5,10],[6,10],[7,10],
+    [4,11],[5,11],[6,11],
+  ],'#c87030');
+
+  // ── White belly/chest ──────────────────────────────────────────────────────
+  fill([
+    [4,9],[5,9],[6,9],
+    [4,10],[5,10],[6,10],[7,10],
+    [4,11],[5,11],[6,11],
+  ],'#f0d090');
+
+  // ── Head (big, round) ──────────────────────────────────────────────────────
+  fill([
+    [3,1],[4,1],[5,1],[6,1],[7,1],[8,1],
+    [2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[9,2],
+    [1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],
+    [1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],
+    [1,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[9,5],[10,5],
+    [2,6],[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[9,6],
+    [3,7],[4,7],[5,7],[6,7],[7,7],[8,7],
+  ],'#a05010');
+
+  // Head highlight
+  fill([[4,2],[5,2],[6,2],[7,2],[4,3],[5,3]],'#c87030');
+
+  // ── Floppy ears (black) ────────────────────────────────────────────────────
+  fill([
+    [1,1],[2,1],[1,2],[2,2],[0,3],[1,3],[0,4],[1,4],[0,5],[1,5],
+  ],'#1a1a1a');
+  fill([
+    [9,1],[10,1],[10,2],[11,2],[11,3],[12,3],[11,4],[12,4],[11,5],[12,5],
+  ],'#1a1a1a');
+
+  // ── White muzzle ──────────────────────────────────────────────────────────
+  fill([
+    [3,5],[4,5],[5,5],[6,5],[7,5],[8,5],
+    [3,6],[4,6],[5,6],[6,6],[7,6],[8,6],
+    [4,7],[5,7],[6,7],[7,7],
+  ],'#f8f8f8');
+
+  // ── Nose (black) ──────────────────────────────────────────────────────────
+  fill([[4,5],[5,5],[6,5],[7,5],[5,6],[6,6]],'#2a2a2a');
+
+  // ── Eyes ──────────────────────────────────────────────────────────────────
+  fill([[3,3],[4,3],[3,4]],'#1a1a1a'); // left eye
+  fill([[8,3],[9,3],[9,4]],'#1a1a1a'); // right eye
+  // eye whites
+  ctx.fillStyle='#f8f8f8';ctx.fillRect(3*s,3*s,s,s);ctx.fillRect(8*s,3*s,s,s);
+  // pupils
+  ctx.fillStyle='#1a1a1a';ctx.fillRect(3*s+3,3*s+2,s-2,s-2);ctx.fillRect(8*s+2,3*s+2,s-2,s-2);
+
+  // ── Laugh mouth ───────────────────────────────────────────────────────────
+  const laugh = f===0
+    ? [[4,6],[5,6],[6,6],[7,6],[5,7],[6,7]]
+    : [[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[4,7],[5,7],[6,7],[7,7]];
+  fill(laugh,'#d82800');
+  // teeth
+  fill(f===0?[[5,7],[6,7]]:[[5,7],[7,7]],'#f8f8f8');
+
+  // ── HA HA text ──────────────────────────────────────────────────────────
+  ctx.font=`bold ${f===0?26:29}px monospace`;
+  ctx.fillStyle=C.yellow;ctx.textAlign='center';
+  ctx.shadowColor=C.black;ctx.shadowBlur=5;
+  ctx.fillText('HA  HA!',6*s,-12);
+
+  // ── Mini duck in raised hand ───────────────────────────────────────────────
+  ctx.save(); ctx.translate(13*s, 4*s); ctx.scale(-1,1);
+  const ds=3;
+  const dpx=(arr,c)=>{ctx.fillStyle=c;arr.forEach(([dx,dy])=>ctx.fillRect(dx*ds,dy*ds,ds,ds));};
+  dpx([[0,2],[1,2],[2,2],[3,2],[4,2],[1,3],[2,3],[3,3],[4,3],[2,4]],'#f8f8f8');
+  dpx([[2,1],[3,1],[4,1],[5,1],[1,2],[5,2],[6,2],[1,3]],'#1a1a1a');
+  dpx([[6,1],[7,1],[8,1],[6,2],[7,2]],'#1a6800');
+  dpx([[8,2],[9,2],[9,1]],'#fcd000');
+  dpx([[2,5],[3,5]],'#fc7460');
+  ctx.fillStyle='#f8f8f8';ctx.fillRect(7*ds,1*ds,ds,ds);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// ── Scene ─────────────────────────────────────────────────────────────────────
+function drawCloud(x,y){
+  ctx.fillStyle=C.cloud;
+  [[0,0,22,11],[18,0,22,11],[9,-7,22,11]].forEach(([ox,oy,w,h])=>ctx.fillRect(x+ox,y+oy,w,h));
+}
+function drawTree(x,gY){
+  ctx.fillStyle=C.trunkDark;ctx.fillRect(x+10,gY-65,22,65);
+  ctx.fillStyle=C.trunk;ctx.fillRect(x+14,gY-65,14,65);
+  ctx.fillStyle=C.treeLeafDark;
+  [[0,-98,44,32],[36,-76,38,30],[-22,-48,40,28],[30,-30,46,32]].forEach(([ox,oy,w,h])=>ctx.fillRect(x+ox,gY+oy,w,h));
+  ctx.fillStyle=C.treeLeaf;
+  [[4,-92,34,22],[40,-70,30,20],[-18,-42,30,20],[34,-24,38,22]].forEach(([ox,oy,w,h])=>ctx.fillRect(x+ox,gY+oy,w,h));
+}
+function drawBush(x,gY){
+  ctx.fillStyle=C.treeLeafDark;ctx.fillRect(x,gY-32,72,32);
+  ctx.fillStyle=C.treeLeaf;ctx.fillRect(x+6,gY-26,60,24);
+}
+function drawScene(){
+  const W=canvas.width,H=canvas.height,gY=Math.floor(H*.72);
+  ctx.fillStyle=C.sky;ctx.fillRect(0,0,W,gY);
+  drawCloud(W*.10,H*.10);drawCloud(W*.44,H*.07);drawCloud(W*.76,H*.14);drawCloud(W*.27,H*.19);
+  drawTree(W*.08,gY);drawTree(W*.83,gY);
+  drawBush(W*.58,gY+4);
+}
+function drawGrass(){
+  const W=canvas.width,H=canvas.height,gY=Math.floor(H*.72);
+  ctx.fillStyle=C.grassDark;ctx.fillRect(0,gY,W,8);
+  ctx.fillStyle=C.grass;ctx.fillRect(0,gY+8,W,58);
+  for(let gx=0;gx<W;gx+=12){
+    ctx.fillStyle=gx%24===0?C.grassTip:C.grassDark;
+    ctx.fillRect(gx,gY,4,10+Math.sin(gx*.35)*4);
+  }
+  ctx.fillStyle=C.groundDark;ctx.fillRect(0,gY+66,W,5);
+  ctx.fillStyle=C.ground;ctx.fillRect(0,gY+71,W,H-(gY+71));
+  ctx.fillStyle=C.groundDark;
+  for(let dx=18;dx<W;dx+=62){ctx.fillRect(dx,gY+78,24,4);ctx.fillRect(dx+34,gY+90,16,4);}
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function drawHUD(){
+  const W=canvas.width,H=canvas.height,hudY=Math.floor(H*.88);
+  ctx.fillStyle=C.hudBg;ctx.fillRect(0,hudY,W,H-hudY);
+  ctx.fillStyle=C.hudBorder;ctx.fillRect(0,hudY,W,4);
+  const boxY=hudY+8,boxH=H-hudY-14;
+
+  // SCORE — left side
+  const scoreX=24;
+  ctx.strokeStyle=C.hudBorder;ctx.lineWidth=3;ctx.strokeRect(scoreX,boxY,192,boxH);
+  ctx.fillStyle=C.white;ctx.font='bold 28px monospace';ctx.textAlign='center';
+  ctx.fillText(String(score).padStart(6,'0'),scoreX+96,boxY+29);
+  ctx.font='bold 13px monospace';ctx.fillText('SCORE',scoreX+96,boxY+48);
+
+  // SHOT — after score
+  const shotX=232;
+  ctx.strokeStyle=C.hudBorder;ctx.lineWidth=3;ctx.strokeRect(shotX,boxY,130,boxH);
+  ctx.fillStyle=C.white;ctx.font='bold 14px monospace';ctx.textAlign='center';
+  ctx.fillText('SHOT',shotX+65,boxY+19);
+  for(let i=0;i<BULLETS;i++){
+    const bx=shotX+18+i*30,by=boxY+26;
+    ctx.fillStyle=i<bulletsLeft?C.orange:'#333';
+    ctx.fillRect(bx,by,9,20);ctx.fillRect(bx+1,by-6,7,8);
+  }
+
+  // HIT — middle
+  const hitX=382;
+  ctx.strokeStyle=C.hudBorder;ctx.lineWidth=3;ctx.strokeRect(hitX,boxY,W-hitX-24,boxH);
+  ctx.fillStyle=C.orange;ctx.font='bold 22px monospace';ctx.textAlign='left';
+  ctx.fillText('HIT',hitX+14,boxY+22);
+  for(let i=0;i<10;i++){
+    const dx=hitX+76+i*22,dy=boxY+8;
+    ctx.fillStyle=i<totalHits.length?(totalHits[i]?C.orange:C.white):'#222';
+    ctx.fillRect(dx,dy+5,14,11);ctx.fillRect(dx+3,dy,9,8);ctx.fillRect(dx+11,dy+2,5,4);
+    ctx.fillRect(dx+3,dy+16,3,5);ctx.fillRect(dx+8,dy+16,3,5);
+  }
+
+  // Muzzle flash
+  if(muzzleFlash>0){
+    ctx.save();ctx.globalAlpha=muzzleFlash/10*.38;ctx.fillStyle=C.yellow;
+    ctx.fillRect(0,0,W,hudY);ctx.restore();muzzleFlash--;
+  }
+}
+
+// ── "NO GUN" warning overlay ──────────────────────────────────────────────────
+let noGunAlpha=0;
+function drawNoGunWarning(){
+  // Fade in when no gun pose, fade out when detected
+  const target = (!isGunPose&&state==='playing') ? 1 : 0;
+  noGunAlpha += (target-noGunAlpha)*0.08;
+  if(noGunAlpha<0.02) return;
+
+  const W=canvas.width,H=canvas.height;
+  ctx.save();
+  ctx.globalAlpha=noGunAlpha;
+  // Dark pill background
+  const msg='✌  SHOW GUN POSE TO AIM';
+  ctx.font='bold 18px monospace';
+  const tw=ctx.measureText(msg).width;
+  const pw=tw+48, ph=48, px=(W-pw)/2, py=H*.42;
+  ctx.fillStyle='rgba(0,0,0,0.82)';
+  ctx.beginPath();
+  ctx.roundRect?ctx.roundRect(px,py,pw,ph,8):ctx.rect(px,py,pw,ph);
+  ctx.fill();
+  ctx.strokeStyle=C.red;ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.roundRect?ctx.roundRect(px,py,pw,ph,8):ctx.rect(px,py,pw,ph);
+  ctx.stroke();
+  // Blinking text
+  if(Math.floor(Date.now()/500)%2===0){
+    ctx.fillStyle=C.white;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor=C.red;ctx.shadowBlur=8;
+    ctx.fillText(msg,W/2,py+ph/2);
+  }
+  ctx.restore();
+}
+
+// ── Status bar (top-left) ─────────────────────────────────────────────────────
+function drawStatus(){
+  const W=canvas.width;
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(0,0,220,34);
+  ctx.font='11px monospace';ctx.textAlign='left';ctx.textBaseline='middle';
+  if(!isGunPose){
+    ctx.fillStyle=C.red;ctx.shadowColor=C.red;ctx.shadowBlur=6;
+    ctx.fillText('✋ NO GUN DETECTED',10,17);
+  } else if(thumbState==='armed'){
+    ctx.fillStyle='#00ff88';ctx.shadowColor='#00ff88';ctx.shadowBlur=6;
+    ctx.fillText('🔫 ARMED — PRESS THUMB',10,17);
+  } else if(thumbState==='fired'){
+    ctx.fillStyle=C.orange;ctx.fillText('🔫 REOPEN THUMB...',10,17);
+  } else {
+    ctx.fillStyle=C.yellow;ctx.fillText('✌ CALIBRATING...',10,17);
+  }
+  ctx.shadowBlur=0;
+
+  // Big ROUND display — top right
+  const rndText='ROUND '+round;
+  ctx.font='bold 32px monospace';
+  const rw=ctx.measureText(rndText).width+32;
+  ctx.fillStyle='rgba(0,0,0,0.62)';ctx.fillRect(W-rw-8,4,rw+8,44);
+  ctx.strokeStyle=C.hudBorder;ctx.lineWidth=2;ctx.strokeRect(W-rw-8,4,rw+8,44);
+  ctx.fillStyle=C.yellow;ctx.textAlign='right';ctx.textBaseline='middle';
+  ctx.shadowColor=C.yellow;ctx.shadowBlur=8;
+  ctx.fillText(rndText,W-16,26);
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+// ── Crosshair ─────────────────────────────────────────────────────────────────
+function drawCrosshair(x,y){
+  ctx.save();
+  if(!isGunPose){
+    // Red X at last position (or center) when no gun detected
+    const cx = x<-500 ? canvas.width/2 : x;
+    const cy = y<-500 ? canvas.height/2 : y;
+    const sz=22;
+    ctx.strokeStyle=C.red;ctx.lineWidth=5;
+    ctx.shadowColor=C.red;ctx.shadowBlur=14;
+    ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(cx-sz,cy-sz);ctx.lineTo(cx+sz,cy+sz);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+sz,cy-sz);ctx.lineTo(cx-sz,cy+sz);ctx.stroke();
+    ctx.restore();return;
+  }
+  if(x<-500){ctx.restore();return;}
+  {
+    const armed=thumbState==='armed';
+    const col=armed?C.white:'rgba(248,248,248,0.85)';
+    const sz=28,gap=9;
+    ctx.strokeStyle=col;ctx.lineWidth=armed?5:3;
+    if(armed){ctx.shadowColor=C.white;ctx.shadowBlur=10;}
+    ctx.beginPath();ctx.moveTo(x,y-gap);ctx.lineTo(x,y-sz);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x,y+gap);ctx.lineTo(x,y+sz);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x-gap,y);ctx.lineTo(x-sz,y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+gap,y);ctx.lineTo(x+sz,y);ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);
+    ctx.lineWidth=armed?4:2.5;ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── Shot Effects ──────────────────────────────────────────────────────────────
+function drawEffects(){
+  const now=Date.now();
+  shotEffects=shotEffects.filter(s=>now-s.t<450);
+  for(const s of shotEffects){
+    const age=now-s.t,life=1-age/450;
+    ctx.save();ctx.globalAlpha=life*life;
+    ctx.strokeStyle=s.hit?C.yellow:C.red;
+    ctx.lineWidth=4;ctx.shadowColor=s.hit?C.yellow:C.red;ctx.shadowBlur=14;
+    ctx.beginPath();ctx.arc(s.x,s.y,18+age/9,0,Math.PI*2);ctx.stroke();
+    ctx.lineWidth=2;ctx.shadowBlur=6;
+    ctx.beginPath();ctx.arc(s.x,s.y,7+age/14,0,Math.PI*2);ctx.stroke();
+    if(life>0.35){
+      ctx.shadowBlur=12;ctx.font='bold 20px monospace';
+      ctx.fillStyle=s.hit?C.yellow:C.red;ctx.textAlign='center';
+      ctx.globalAlpha=life;
+      ctx.fillText(s.hit?'BANG!':'MISS',s.x,s.y-30-age*.045);
+    }
+    ctx.restore();
+  }
+}
+
+// ── Ready screen ──────────────────────────────────────────────────────────────
+let readyPulse=0;
+function drawReady(){
+  drawScene();drawGrass();drawHUD();drawCrosshair(smoothAim.x,smoothAim.y);drawStatus();
+  const W=canvas.width,H=canvas.height;
+  ctx.fillStyle='rgba(0,0,0,0.74)';ctx.fillRect(W/2-295,H*.10,590,260);
+  ctx.strokeStyle=C.white;ctx.lineWidth=4;ctx.strokeRect(W/2-295,H*.10,590,260);
+  ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.strokeRect(W/2-289,H*.10+6,578,248);
+  ctx.textAlign='center';
+  ctx.font='bold 42px monospace';ctx.fillStyle=C.yellow;ctx.fillText('DUCK HUNT AR',W/2,H*.10+52);
+  ctx.font='13px monospace';ctx.fillStyle=C.white;
+  ['✌  HOLD INDEX + MIDDLE FINGER UP LIKE A GUN',
+   '👍  KEEP THUMB OPEN AND UP TO AIM',
+   '🔫  PRESS THUMB IN LIKE A TRIGGER TO SHOOT',
+   '🦆  HIT BOTH DUCKS — 3 BULLETS PER ROUND',
+  ].forEach((l,i)=>ctx.fillText(l,W/2,H*.10+92+i*30));
+  // start circle — positioned in sky area, well above HUD
+  readyPulse+=0.06;
+  const pr=82+Math.sin(readyPulse)*6,px=W/2,py=H*.55;
+  ctx.save();ctx.translate(px,py);
+  ctx.shadowColor='#00ff99';ctx.shadowBlur=28;
+  ctx.beginPath();ctx.arc(0,0,pr,0,Math.PI*2);ctx.fillStyle='#06D6A0';ctx.fill();
+  try{const sh=ctx.createRadialGradient(-pr*.3,-pr*.3,1,-pr*.3,-pr*.3,pr*.7);sh.addColorStop(0,'rgba(255,255,255,0.42)');sh.addColorStop(1,'rgba(255,255,255,0)');ctx.shadowBlur=0;ctx.fillStyle=sh;ctx.beginPath();ctx.arc(0,0,pr,0,Math.PI*2);ctx.fill();}catch(e){}
+  ctx.shadowBlur=0;ctx.fillStyle=C.black;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('PRESS THUMB',0,-10);ctx.fillText('TO START!',0,12);
+  ctx.restore();
+}
+
+// ── Game Over ─────────────────────────────────────────────────────────────────
+function drawGameOver(){
+  drawScene();drawGrass();drawHUD();drawCrosshair(smoothAim.x,smoothAim.y);drawStatus();
+  const W=canvas.width,H=canvas.height;
+  ctx.fillStyle='rgba(0,0,0,0.80)';ctx.fillRect(W/2-245,H*.22,490,265);
+  ctx.strokeStyle=C.red;ctx.lineWidth=4;ctx.strokeRect(W/2-245,H*.22,490,265);
+  ctx.textAlign='center';
+  ctx.font='bold 46px monospace';ctx.fillStyle=C.red;ctx.fillText('GAME OVER',W/2,H*.22+62);
+  ctx.font='bold 20px monospace';ctx.fillStyle=C.white;ctx.fillText('FINAL: '+String(score).padStart(6,'0'),W/2,H*.22+108);
+  ctx.font='14px monospace';ctx.fillStyle=C.yellow;ctx.fillText('ROUND '+round+'   DUCKS HIT: '+ducksHit,W/2,H*.22+144);
+  ctx.font='bold 13px monospace';ctx.fillStyle=Math.floor(Date.now()/500)%2===0?C.white:'#555';
+  ctx.fillText('PRESS THUMB TO PLAY AGAIN',W/2,H*.22+212);
+}
+
+// ── Game Logic ────────────────────────────────────────────────────────────────
+function spawnDucks(){ducks=[new Duck(),new Duck()];}
+
+function startGame(){
+  score=0;round=1;ducksHit=0;ducksMissed=0;
+  bulletsLeft=BULLETS;totalHits=[];
+  ducks=[];feathers=[];shotEffects=[];
+  dogAnim=null;nextRoundTimer=null;
+  thumbState='unknown';stableCount=0;openBaseline=null;
+  state='playing';spawnDucks();
+}
+
+function onRoundEnd(){
+  if(nextRoundTimer)return;
+  nextRoundTimer=setTimeout(()=>{
+    nextRoundTimer=null;
+    if(ducksMissed>=10){state='gameover';return;}
+    round++;bulletsLeft=BULLETS;
+    ducks=[];feathers=[];shotEffects=[];dogAnim=null;
+    spawnDucks();
+  },1800);
+}
+
+function shoot(){
+  if(state!=='playing'||bulletsLeft<=0)return;
+  const aim=stableAim();
+  bulletsLeft--;muzzleFlash=10;
+  let hit=false;
+  for(const d of ducks){
+    if(d.dead||d.hit)continue;
+    if(Math.hypot(aim.x-d.x,aim.y-d.y)<70){ // bigger hit radius for bigger ducks
+      d.hit=true;d.falling=true;d.popup=42;d.fallVy=-2.5;
+      score+=500;ducksHit++;
+      totalHits.push(true);if(totalHits.length>10)totalHits.shift();
+      for(let f=0;f<18;f++)feathers.push(new Feather(d.x,d.y));
+      hit=true;break;
+    }
+  }
+  if(!hit){
+    totalHits.push(false);if(totalHits.length>10)totalHits.shift();
+  }
+  shotEffects.push({x:aim.x,y:aim.y,t:Date.now(),hit});
+  if(bulletsLeft===0){
+    const alive=ducks.filter(d=>!d.hit&&!d.dead);
+    if(alive.length>0){triggerDog();ducksMissed+=alive.length;}
+    setTimeout(()=>{ducks.forEach(d=>{if(!d.hit&&!d.dead)d.dead=true;});},700);
+  }
+}
+
+// ── Main Loop ─────────────────────────────────────────────────────────────────
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  updateAim();
+
+  if(state==='ready'){
+    drawReady();
+  } else if(state==='playing'){
+    drawScene();
+    updateDog();drawDog();
+    drawGrass();
+    for(let i=ducks.length-1;i>=0;i--){
+      ducks[i].update();ducks[i].draw();
+      if(ducks[i].escaped&&!ducks[i]._ec){
+        ducks[i]._ec=true;
+        if(!ducks[i].hit){ducksMissed++;totalHits.push(false);if(totalHits.length>10)totalHits.shift();triggerDog();}
+      }
+    }
+    for(let i=feathers.length-1;i>=0;i--){
+      feathers[i].update();feathers[i].draw();if(feathers[i].life<=0)feathers.splice(i,1);
+    }
+    drawEffects();drawHUD();drawStatus();
+    drawCrosshair(smoothAim.x,smoothAim.y);
+    drawNoGunWarning();
+    const allGone=ducks.length>0&&ducks.every(d=>d.dead||(d.y>canvas.height+100));
+    if(allGone&&!nextRoundTimer)onRoundEnd();
+  } else if(state==='gameover'){
+    drawGameOver();
+  }
+  requestAnimationFrame(render);
+}
+
+// ── MediaPipe ─────────────────────────────────────────────────────────────────
+function initHandTracking(){
+  const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.60,minTrackingConfidence:0.55});
+  hands.onResults(results=>{
+    const now=Date.now();
+    if(results.multiHandLandmarks&&results.multiHandLandmarks.length){
+      const lm=results.multiHandLandmarks[0];
+      // Always track index finger position regardless of gun pose
+      rawAim.x=(1-lm[8].x)*canvas.width;
+      rawAim.y=lm[8].y*canvas.height;
+      isGunPose=detectGunPose(lm);
+      if(isGunPose){
+        lastSeen=now;
+        const fired=checkThumbShoot(lm,now);
+        if(fired){
+          if(state==='ready'||state==='gameover')startGame();
+          else if(state==='playing')shoot();
+        }
+      } else {
+        thumbState='unknown';stableCount=0;openBaseline=null;
+      }
+    } else {
+      isGunPose=false;
+      // rawAim not updated — X stays frozen at last position
+      if(now-lastSeen>DROPOUT_GRACE){thumbState='unknown';stableCount=0;openBaseline=null;}
+    }
+  });
+  const camera=new Camera(video,{
+    onFrame:async()=>{await hands.send({image:video});},
+    width:1280,height:720,
+  });
+  document.getElementById('load-status').textContent='LOADING HAND TRACKING...';
+  camera.start().then(()=>{
+    video.classList.add('show');
+    document.getElementById('loading').classList.add('hidden');
+    state='ready';
+  }).catch(err=>{
+    document.getElementById('load-status').textContent='CAMERA ERROR — OPEN IN BROWSER DIRECTLY';
+    console.error(err);
+  });
+}
+
+render();
+initHandTracking();
+</script>
+</body>
+</html>
