@@ -9,6 +9,12 @@
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:monospace;cursor:none}
 #container{position:relative;width:100vw;height:100vh}
 #gameCanvas{position:absolute;inset:0;width:100%;height:100%}
+/* Crosshair overlay — always on top of everything */
+#crosshairCanvas{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;
+  z-index:9999;
+}
 #video{
   position:absolute;right:16px;bottom:16px;
   width:196px;height:148px;object-fit:cover;
@@ -29,18 +35,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:mon
 }
 #loading.hidden{opacity:0;pointer-events:none}
 .nes-box{
-  background:#000;color:#fff;border:4px solid #f8f8f8;
-  padding:28px 40px;text-align:center;
-  box-shadow:inset -4px -4px 0 #555,inset 4px 4px 0 #fff,8px 8px 0 rgba(0,0,0,.4);
+  background:#000;color:#fff;border:6px solid #f8f8f8;
+  padding:36px 52px;text-align:center;
+  box-shadow:inset -4px -4px 0 #555,inset 4px 4px 0 #fff,10px 10px 0 rgba(0,0,0,0.5);
+  image-rendering:pixelated;
 }
-.nes-title{font-size:32px;letter-spacing:4px;color:#fcd000;margin-bottom:12px;text-shadow:3px 3px 0 #d82800}
-.nes-sub{font-size:12px;letter-spacing:2px;color:#aaa;animation:blink 1s step-end infinite}
+.nes-title{font-size:48px;letter-spacing:6px;color:#fcd000;margin-bottom:14px;text-shadow:4px 4px 0 #d82800,6px 6px 0 #8a1000;font-weight:900;text-transform:uppercase}
+.nes-sub{font-size:13px;letter-spacing:3px;color:#98d800;animation:blink 1s step-end infinite;font-weight:bold;text-transform:uppercase}
 @keyframes blink{50%{opacity:0}}
 </style>
 </head>
 <body>
 <div id="container">
   <canvas id="gameCanvas"></canvas>
+  <!-- Separate top-layer canvas just for crosshair -->
+  <canvas id="crosshairCanvas"></canvas>
   <video id="video" autoplay playsinline muted></video>
   <div id="camLabel">LIVE CAM</div>
   <div id="loading">
@@ -55,8 +64,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:mon
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
-const video  = document.getElementById('video');
-function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }
+// Separate crosshair canvas — always on top
+const xhCanvas = document.getElementById('crosshairCanvas');
+const xhCtx    = xhCanvas.getContext('2d');
+
+function resize(){
+  canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+  xhCanvas.width=window.innerWidth; xhCanvas.height=window.innerHeight;
+}
 resize(); window.addEventListener('resize', resize);
 
 // ── NES Palette ───────────────────────────────────────────────────────────────
@@ -71,6 +86,29 @@ const C = {
   red:'#d82800', grey:'#6a6a6a',
   hudBg:'#000', hudBorder:'#98d800',
 };
+
+// ── Pixel Hand Frames (from retro_hand_thumb_exact_grid_animation.html) ───────
+const HAND_COLS = 39, HAND_ROWS = 21;
+const frameUp = [[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751",null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#806751",null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#806751",null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#806751",null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#ffdfc6","#806751",null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#ffdfc6","#806751",null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#ffdfc6","#806751",null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#ffdfc6","#806751",null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6","#806751","#806751","#806751","#806751","#806751",null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751","#806751","#f1a595","#f1a595","#f1a595","#f1a595","#f1a595","#f1a595","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#f1a595","#f1a595","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#f1a595","#f1a595","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751",null,null]];
+const frameDownBang = [[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,"#ffc300",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751","#806751","#806751",null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,"#ffc300",null,null,null,null,"#ffc300",null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#806751","#806751",null,null,null,null,null,null,null,null],[null,"#ffc300",null,null,"#ffc300",null,null,null,null,null,null,null,null,"#ffc300",null,null,null,null,null,null,"#806751","#806751","#806751","#ffdfc6","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6","#ffdfc6","#806751",null,null,null,null,null,null,null],[null,null,"#ff001e",null,"#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#806751","#806751","#806751","#806751","#806751","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6","#806751","#806751","#806751","#806751","#806751",null,null],[null,"#ff001e",null,"#ffc300","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#806751","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#806751","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6",null],[null,null,null,"#ff001e","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#806751","#806751","#806751","#806751","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,"#ff001e","#ff001e","#ffc300","#ff001e","#ffc300","#ff001e","#ff001e","#ffc300","#ffc300","#ffc300","#806751","#806751","#806751","#f1a595","#f1a595","#f1a595","#f1a595","#f1a595","#f1a595","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,"#ff001e","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#ffc300","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,"#ff001e","#ffc300","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#ff001e","#806751","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,"#ff001e",null,null,"#ffc300",null,null,null,null,"#ffc300","#ffc300",null,"#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#f1a595","#f1a595","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,"#ffc300",null,null,null,"#ffc300",null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffdfc6","#ffdfc6","#ffdfc6","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,"#ffc300",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],["#ffc300",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#f1a595","#f1a595","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#ffdfc6","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#f1a595","#ffcca1","#ffcca1","#ffcca1","#ffcca1","#ffdfc6",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751","#806751",null,null]];
+
+// Pixel hand draw
+let handFrame = 0; // 0=up, 1=down
+let handFlipTimer = 0;
+
+function drawPixelHand(cx, cy, s) {
+  const frame = handFrame === 0 ? frameUp : frameDownBang;
+  const offX = cx - (HAND_COLS * s) / 2;
+  const offY = cy - (HAND_ROWS * s) / 2;
+  for (let r = 0; r < HAND_ROWS; r++) {
+    for (let c = 0; c < HAND_COLS; c++) {
+      const color = frame[r][c];
+      if (!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(offX + c * s, offY + r * s, s, s);
+    }
+  }
+}
 
 // ── Game State ────────────────────────────────────────────────────────────────
 const BULLETS = 3;
@@ -92,27 +130,23 @@ function stableAim(){
 }
 function updateAim(){
   if(rawAim.x>-500){
-    // Always smoothly lerp toward raw — whether gun pose or not
     smoothAim.x+=(rawAim.x-smoothAim.x)*AIM_LERP;
     smoothAim.y+=(rawAim.y-smoothAim.y)*AIM_LERP;
     if(isGunPose) pushAim(smoothAim.x,smoothAim.y);
   }
-  // Never reset smoothAim to -999 — X stays where it was
 }
 
 // ── Thumb Press Detection ─────────────────────────────────────────────────────
-// Palm-local coords so camera angle / wrist tilt don't matter
 let thumbState='unknown', stableCount=0, smoothCurl=0;
 let lastShotTime=0, prevPalmCenter=null, prevPalmAngle=null, openBaseline=null;
 let palmMove=0, rotDelta=0;
 
-// TUNED VALUES — looser thresholds so second shot registers faster
-const OPEN_THRESH   = 0.24;  // thumb must be MORE open than this to arm (raised = easier to arm)
-const CLOSE_THRESH  = 0.48;  // thumb press to fire (lowered = easier to fire)
-const STABLE_FRAMES = 2;     // fewer frames needed to re-arm
-const SHOT_COOLDOWN = 0;     // no cooldown between shots
-const CURL_LERP     = 0.38;  // faster response (was 0.28)
-const MOVE_GATE     = 0.022; // slightly more forgiving movement gate
+const OPEN_THRESH   = 0.24;
+const CLOSE_THRESH  = 0.48;
+const STABLE_FRAMES = 2;
+const SHOT_COOLDOWN = 0;
+const CURL_LERP     = 0.38;
+const MOVE_GATE     = 0.022;
 const ROT_GATE      = 0.22;
 
 function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
@@ -126,7 +160,7 @@ function projectLocal(pt,origin,ux,uy,scale){const v={x:(pt.x-origin.x)/scale,y:
 
 function updateOpenBaseline(lt){
   if(!openBaseline){openBaseline={radial:Math.hypot(lt.x,lt.y),spread:Math.abs(lt.x)};return}
-  const a=0.22; // slightly faster baseline drift
+  const a=0.22;
   openBaseline.radial+=(Math.hypot(lt.x,lt.y)-openBaseline.radial)*a;
   openBaseline.spread+=(Math.abs(lt.x)-openBaseline.spread)*a;
 }
@@ -159,7 +193,6 @@ function measureThumbPress(lm){
 
 function checkThumbShoot(lm,now){
   const m=measureThumbPress(lm);
-  // Instant arm — no waiting, no stable frames
   if(thumbState==='unknown'||thumbState==='fired'){
     if(m.smoothCurl<OPEN_THRESH) thumbState='armed';
   }
@@ -169,7 +202,6 @@ function checkThumbShoot(lm,now){
       lastShotTime=now;return true;
     }
   }
-  // Re-arm the moment thumb opens back up
   if(thumbState==='fired'&&m.smoothCurl<OPEN_THRESH*0.88){
     thumbState='armed';
   }
@@ -177,32 +209,24 @@ function checkThumbShoot(lm,now){
 }
 
 function detectGunPose(lm){
-  // Palm-local detection — works regardless of hand rotation/tilt angle
-  // Project each fingertip into palm coordinate space and check extension
   const palm = palmCenter(lm);
   const scale = Math.max(0.0001, vdist(lm[5], lm[17]));
-
-  // For each finger: measure how far tip is from MCP (knuckle base)
-  // A finger is "extended" if tip is further from palm than mid-knuckle
   function fingerExtended(tipIdx, midIdx, mcpIdx){
     const tipDist = vdist(lm[tipIdx], lm[mcpIdx]);
     const midDist = vdist(lm[midIdx], lm[mcpIdx]);
-    return tipDist > midDist * 1.1; // tip must be further out than mid knuckle
+    return tipDist > midDist * 1.1;
   }
   function fingerCurled(tipIdx, mcpIdx){
-    // Curled: tip is close to palm
     return vdist(lm[tipIdx], palm) / scale < 0.7;
   }
-
   const indexExt  = fingerExtended(8,  6,  5);
   const middleExt = fingerExtended(12, 10, 9);
   const ringCurl  = fingerCurled(16, 13);
   const pinkyCurl = fingerCurled(20, 17);
-
   return indexExt && middleExt && ringCurl && pinkyCurl;
 }
 
-// ── Duck  (DS=7, bigger than before) ─────────────────────────────────────────
+// ── Duck ──────────────────────────────────────────────────────────────────────
 const DS=7;
 class Duck{
   constructor(){
@@ -252,25 +276,17 @@ class Duck{
   _px(){
     const s=DS,p=this.pal;
     const px=(arr,c)=>{ctx.fillStyle=c;arr.forEach(([x,y])=>ctx.fillRect(x*s,y*s,s,s));};
-    // white belly
     px([[0,2],[1,2],[2,2],[3,2],[4,2],[1,3],[2,3],[3,3],[4,3],[5,3],[2,4],[3,4],[4,4]],p.wing);
-    // body
     px([[2,1],[3,1],[4,1],[5,1],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,3],[2,3]],p.body);
-    // wing flap
     px(this.flap?[[0,1],[1,1],[0,0],[1,0]]:[[0,3],[1,4],[0,4]],p.body);
-    // head
     px([[6,1],[7,1],[8,1],[6,2],[7,2]],p.head);
-    // beak
     px([[8,2],[9,2],[9,1]],p.beak);
-    // feet
     px([[2,5],[3,5]],p.feet);
-    // eye
     ctx.fillStyle='#000';ctx.fillRect(7*s+1,1*s+1,s-1,s-1);
     ctx.fillStyle='#f8f8f8';ctx.fillRect(7*s+1,1*s+1,3,3);
   }
 }
 
-// ── Feather ───────────────────────────────────────────────────────────────────
 class Feather{
   constructor(x,y){
     this.x=x;this.y=y;this.vx=(Math.random()-.5)*8;this.vy=-4-Math.random()*5;
@@ -288,7 +304,6 @@ class Feather{
   }
 }
 
-// ── Dog (BIG — matching reference image) ─────────────────────────────────────
 function triggerDog(){
   const gY=Math.floor(canvas.height*.72);
   dogAnim={phase:'rise',y:gY+160,timer:0,frame:0};
@@ -305,101 +320,29 @@ function updateDog(){
 function drawDog(){
   if(!dogAnim)return;
   const x=canvas.width*.38, y=dogAnim.y;
-  // Scale the dog to be LARGE — filling most of the sky area height
   const s=7, f=dogAnim.frame;
   ctx.save(); ctx.translate(x,y);
-
   const fill=(arr,c)=>{ctx.fillStyle=c;arr.forEach(([px,py])=>ctx.fillRect(px*s,py*s,s,s));};
-
-  // ── Body (brown) ──────────────────────────────────────────────────────────
-  fill([
-    // torso
-    [3,8],[4,8],[5,8],[6,8],[7,8],[8,8],
-    [2,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],
-    [2,10],[3,10],[4,10],[5,10],[6,10],[7,10],[8,10],[9,10],
-    [2,11],[3,11],[4,11],[5,11],[6,11],[7,11],[8,11],[9,11],
-    [3,12],[4,12],[5,12],[6,12],[7,12],[8,12],
-    // arm holding duck (right side, raised)
-    [9,6],[10,6],[11,6],[12,6],
-    [9,7],[10,7],[11,7],
-    [9,8],[10,8],
-    // left arm down
-    [1,9],[2,9],[1,10],[2,10],[1,11],[2,11],
-    // legs
-    [3,13],[4,13],[7,13],[8,13],
-    [3,14],[4,14],[7,14],[8,14],
-    [2,15],[3,15],[4,15],[5,15],[7,15],[8,15],[9,15],[10,15],
-  ],'#a05010');
-
-  // Body highlight
-  fill([
-    [4,9],[5,9],[6,9],[7,9],
-    [4,10],[5,10],[6,10],[7,10],
-    [4,11],[5,11],[6,11],
-  ],'#c87030');
-
-  // ── White belly/chest ──────────────────────────────────────────────────────
-  fill([
-    [4,9],[5,9],[6,9],
-    [4,10],[5,10],[6,10],[7,10],
-    [4,11],[5,11],[6,11],
-  ],'#f0d090');
-
-  // ── Head (big, round) ──────────────────────────────────────────────────────
-  fill([
-    [3,1],[4,1],[5,1],[6,1],[7,1],[8,1],
-    [2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[9,2],
-    [1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],
-    [1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],
-    [1,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[9,5],[10,5],
-    [2,6],[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[9,6],
-    [3,7],[4,7],[5,7],[6,7],[7,7],[8,7],
-  ],'#a05010');
-
-  // Head highlight
+  fill([[3,8],[4,8],[5,8],[6,8],[7,8],[8,8],[2,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[2,10],[3,10],[4,10],[5,10],[6,10],[7,10],[8,10],[9,10],[2,11],[3,11],[4,11],[5,11],[6,11],[7,11],[8,11],[9,11],[3,12],[4,12],[5,12],[6,12],[7,12],[8,12],[9,6],[10,6],[11,6],[12,6],[9,7],[10,7],[11,7],[9,8],[10,8],[1,9],[2,9],[1,10],[2,10],[1,11],[2,11],[3,13],[4,13],[7,13],[8,13],[3,14],[4,14],[7,14],[8,14],[2,15],[3,15],[4,15],[5,15],[7,15],[8,15],[9,15],[10,15]],'#a05010');
+  fill([[4,9],[5,9],[6,9],[7,9],[4,10],[5,10],[6,10],[7,10],[4,11],[5,11],[6,11]],'#c87030');
+  fill([[4,9],[5,9],[6,9],[4,10],[5,10],[6,10],[7,10],[4,11],[5,11],[6,11]],'#f0d090');
+  fill([[3,1],[4,1],[5,1],[6,1],[7,1],[8,1],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[9,2],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[8,4],[9,4],[10,4],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[9,5],[10,5],[2,6],[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[9,6],[3,7],[4,7],[5,7],[6,7],[7,7],[8,7]],'#a05010');
   fill([[4,2],[5,2],[6,2],[7,2],[4,3],[5,3]],'#c87030');
-
-  // ── Floppy ears (black) ────────────────────────────────────────────────────
-  fill([
-    [1,1],[2,1],[1,2],[2,2],[0,3],[1,3],[0,4],[1,4],[0,5],[1,5],
-  ],'#1a1a1a');
-  fill([
-    [9,1],[10,1],[10,2],[11,2],[11,3],[12,3],[11,4],[12,4],[11,5],[12,5],
-  ],'#1a1a1a');
-
-  // ── White muzzle ──────────────────────────────────────────────────────────
-  fill([
-    [3,5],[4,5],[5,5],[6,5],[7,5],[8,5],
-    [3,6],[4,6],[5,6],[6,6],[7,6],[8,6],
-    [4,7],[5,7],[6,7],[7,7],
-  ],'#f8f8f8');
-
-  // ── Nose (black) ──────────────────────────────────────────────────────────
+  fill([[1,1],[2,1],[1,2],[2,2],[0,3],[1,3],[0,4],[1,4],[0,5],[1,5]],'#1a1a1a');
+  fill([[9,1],[10,1],[10,2],[11,2],[11,3],[12,3],[11,4],[12,4],[11,5],[12,5]],'#1a1a1a');
+  fill([[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[4,7],[5,7],[6,7],[7,7]],'#f8f8f8');
   fill([[4,5],[5,5],[6,5],[7,5],[5,6],[6,6]],'#2a2a2a');
-
-  // ── Eyes ──────────────────────────────────────────────────────────────────
-  fill([[3,3],[4,3],[3,4]],'#1a1a1a'); // left eye
-  fill([[8,3],[9,3],[9,4]],'#1a1a1a'); // right eye
-  // eye whites
+  fill([[3,3],[4,3],[3,4]],'#1a1a1a');
+  fill([[8,3],[9,3],[9,4]],'#1a1a1a');
   ctx.fillStyle='#f8f8f8';ctx.fillRect(3*s,3*s,s,s);ctx.fillRect(8*s,3*s,s,s);
-  // pupils
   ctx.fillStyle='#1a1a1a';ctx.fillRect(3*s+3,3*s+2,s-2,s-2);ctx.fillRect(8*s+2,3*s+2,s-2,s-2);
-
-  // ── Laugh mouth ───────────────────────────────────────────────────────────
-  const laugh = f===0
-    ? [[4,6],[5,6],[6,6],[7,6],[5,7],[6,7]]
-    : [[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[4,7],[5,7],[6,7],[7,7]];
+  const laugh=f===0?[[4,6],[5,6],[6,6],[7,6],[5,7],[6,7]]:[[3,6],[4,6],[5,6],[6,6],[7,6],[8,6],[4,7],[5,7],[6,7],[7,7]];
   fill(laugh,'#d82800');
-  // teeth
   fill(f===0?[[5,7],[6,7]]:[[5,7],[7,7]],'#f8f8f8');
-
-  // ── HA HA text ──────────────────────────────────────────────────────────
   ctx.font=`bold ${f===0?26:29}px monospace`;
   ctx.fillStyle=C.yellow;ctx.textAlign='center';
   ctx.shadowColor=C.black;ctx.shadowBlur=5;
   ctx.fillText('HA  HA!',6*s,-12);
-
-  // ── Mini duck in raised hand ───────────────────────────────────────────────
   ctx.save(); ctx.translate(13*s, 4*s); ctx.scale(-1,1);
   const ds=3;
   const dpx=(arr,c)=>{ctx.fillStyle=c;arr.forEach(([dx,dy])=>ctx.fillRect(dx*ds,dy*ds,ds,ds));};
@@ -410,7 +353,6 @@ function drawDog(){
   dpx([[2,5],[3,5]],'#fc7460');
   ctx.fillStyle='#f8f8f8';ctx.fillRect(7*ds,1*ds,ds,ds);
   ctx.restore();
-
   ctx.restore();
 }
 
@@ -458,15 +400,11 @@ function drawHUD(){
   ctx.fillStyle=C.hudBg;ctx.fillRect(0,hudY,W,H-hudY);
   ctx.fillStyle=C.hudBorder;ctx.fillRect(0,hudY,W,4);
   const boxY=hudY+8,boxH=H-hudY-14;
-
-  // SCORE — left side
   const scoreX=24;
   ctx.strokeStyle=C.hudBorder;ctx.lineWidth=3;ctx.strokeRect(scoreX,boxY,192,boxH);
   ctx.fillStyle=C.white;ctx.font='bold 28px monospace';ctx.textAlign='center';
   ctx.fillText(String(score).padStart(6,'0'),scoreX+96,boxY+29);
   ctx.font='bold 13px monospace';ctx.fillText('SCORE',scoreX+96,boxY+48);
-
-  // SHOT — after score
   const shotX=232;
   ctx.strokeStyle=C.hudBorder;ctx.lineWidth=3;ctx.strokeRect(shotX,boxY,130,boxH);
   ctx.fillStyle=C.white;ctx.font='bold 14px monospace';ctx.textAlign='center';
@@ -476,8 +414,6 @@ function drawHUD(){
     ctx.fillStyle=i<bulletsLeft?C.orange:'#333';
     ctx.fillRect(bx,by,9,20);ctx.fillRect(bx+1,by-6,7,8);
   }
-
-  // HIT — middle
   const hitX=382;
   ctx.strokeStyle=C.hudBorder;ctx.lineWidth=3;ctx.strokeRect(hitX,boxY,W-hitX-24,boxH);
   ctx.fillStyle=C.orange;ctx.font='bold 22px monospace';ctx.textAlign='left';
@@ -488,26 +424,21 @@ function drawHUD(){
     ctx.fillRect(dx,dy+5,14,11);ctx.fillRect(dx+3,dy,9,8);ctx.fillRect(dx+11,dy+2,5,4);
     ctx.fillRect(dx+3,dy+16,3,5);ctx.fillRect(dx+8,dy+16,3,5);
   }
-
-  // Muzzle flash
   if(muzzleFlash>0){
     ctx.save();ctx.globalAlpha=muzzleFlash/10*.38;ctx.fillStyle=C.yellow;
     ctx.fillRect(0,0,W,hudY);ctx.restore();muzzleFlash--;
   }
 }
 
-// ── "NO GUN" warning overlay ──────────────────────────────────────────────────
+// ── Status bar ────────────────────────────────────────────────────────────────
 let noGunAlpha=0;
 function drawNoGunWarning(){
-  // Fade in when no gun pose, fade out when detected
   const target = (!isGunPose&&state==='playing') ? 1 : 0;
   noGunAlpha += (target-noGunAlpha)*0.08;
   if(noGunAlpha<0.02) return;
-
   const W=canvas.width,H=canvas.height;
   ctx.save();
   ctx.globalAlpha=noGunAlpha;
-  // Dark pill background
   const msg='✌  SHOW GUN POSE TO AIM';
   ctx.font='bold 18px monospace';
   const tw=ctx.measureText(msg).width;
@@ -520,7 +451,6 @@ function drawNoGunWarning(){
   ctx.beginPath();
   ctx.roundRect?ctx.roundRect(px,py,pw,ph,8):ctx.rect(px,py,pw,ph);
   ctx.stroke();
-  // Blinking text
   if(Math.floor(Date.now()/500)%2===0){
     ctx.fillStyle=C.white;ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.shadowColor=C.red;ctx.shadowBlur=8;
@@ -529,7 +459,6 @@ function drawNoGunWarning(){
   ctx.restore();
 }
 
-// ── Status bar (top-left) ─────────────────────────────────────────────────────
 function drawStatus(){
   const W=canvas.width;
   ctx.save();
@@ -547,8 +476,6 @@ function drawStatus(){
     ctx.fillStyle=C.yellow;ctx.fillText('✌ CALIBRATING...',10,17);
   }
   ctx.shadowBlur=0;
-
-  // Big ROUND display — top right
   const rndText='ROUND '+round;
   ctx.font='bold 32px monospace';
   const rw=ctx.measureText(rndText).width+32;
@@ -561,37 +488,33 @@ function drawStatus(){
   ctx.restore();
 }
 
-// ── Crosshair ─────────────────────────────────────────────────────────────────
+// ── Crosshair — drawn to SEPARATE top canvas ──────────────────────────────────
 function drawCrosshair(x,y){
-  ctx.save();
+  xhCtx.clearRect(0,0,xhCanvas.width,xhCanvas.height);
   if(!isGunPose){
-    // Red X at last position (or center) when no gun detected
-    const cx = x<-500 ? canvas.width/2 : x;
-    const cy = y<-500 ? canvas.height/2 : y;
+    const cx = x<-500 ? xhCanvas.width/2 : x;
+    const cy = y<-500 ? xhCanvas.height/2 : y;
     const sz=22;
-    ctx.strokeStyle=C.red;ctx.lineWidth=5;
-    ctx.shadowColor=C.red;ctx.shadowBlur=14;
-    ctx.lineCap='round';
-    ctx.beginPath();ctx.moveTo(cx-sz,cy-sz);ctx.lineTo(cx+sz,cy+sz);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(cx+sz,cy-sz);ctx.lineTo(cx-sz,cy+sz);ctx.stroke();
-    ctx.restore();return;
+    xhCtx.strokeStyle=C.red;xhCtx.lineWidth=5;
+    xhCtx.shadowColor=C.red;xhCtx.shadowBlur=14;
+    xhCtx.lineCap='round';
+    xhCtx.beginPath();xhCtx.moveTo(cx-sz,cy-sz);xhCtx.lineTo(cx+sz,cy+sz);xhCtx.stroke();
+    xhCtx.beginPath();xhCtx.moveTo(cx+sz,cy-sz);xhCtx.lineTo(cx-sz,cy+sz);xhCtx.stroke();
+    return;
   }
-  if(x<-500){ctx.restore();return;}
-  {
-    const armed=thumbState==='armed';
-    const col=armed?C.white:'rgba(248,248,248,0.85)';
-    const sz=28,gap=9;
-    ctx.strokeStyle=col;ctx.lineWidth=armed?5:3;
-    if(armed){ctx.shadowColor=C.white;ctx.shadowBlur=10;}
-    ctx.beginPath();ctx.moveTo(x,y-gap);ctx.lineTo(x,y-sz);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(x,y+gap);ctx.lineTo(x,y+sz);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(x-gap,y);ctx.lineTo(x-sz,y);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(x+gap,y);ctx.lineTo(x+sz,y);ctx.stroke();
-    ctx.shadowBlur=0;
-    ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);
-    ctx.lineWidth=armed?4:2.5;ctx.stroke();
-  }
-  ctx.restore();
+  if(x<-500) return;
+  const armed=thumbState==='armed';
+  const col=armed?C.white:'rgba(248,248,248,0.85)';
+  const sz=28,gap=9;
+  xhCtx.strokeStyle=col;xhCtx.lineWidth=armed?5:3;
+  if(armed){xhCtx.shadowColor=C.white;xhCtx.shadowBlur=10;}
+  xhCtx.beginPath();xhCtx.moveTo(x,y-gap);xhCtx.lineTo(x,y-sz);xhCtx.stroke();
+  xhCtx.beginPath();xhCtx.moveTo(x,y+gap);xhCtx.lineTo(x,y+sz);xhCtx.stroke();
+  xhCtx.beginPath();xhCtx.moveTo(x-gap,y);xhCtx.lineTo(x-sz,y);xhCtx.stroke();
+  xhCtx.beginPath();xhCtx.moveTo(x+gap,y);xhCtx.lineTo(x+sz,y);xhCtx.stroke();
+  xhCtx.shadowBlur=0;
+  xhCtx.beginPath();xhCtx.arc(x,y,7,0,Math.PI*2);
+  xhCtx.lineWidth=armed?4:2.5;xhCtx.stroke();
 }
 
 // ── Shot Effects ──────────────────────────────────────────────────────────────
@@ -616,37 +539,288 @@ function drawEffects(){
   }
 }
 
-// ── Ready screen ──────────────────────────────────────────────────────────────
-let readyPulse=0;
-function drawReady(){
-  drawScene();drawGrass();drawHUD();drawCrosshair(smoothAim.x,smoothAim.y);drawStatus();
-  const W=canvas.width,H=canvas.height;
-  ctx.fillStyle='rgba(0,0,0,0.74)';ctx.fillRect(W/2-295,H*.10,590,260);
-  ctx.strokeStyle=C.white;ctx.lineWidth=4;ctx.strokeRect(W/2-295,H*.10,590,260);
-  ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.strokeRect(W/2-289,H*.10+6,578,248);
-  ctx.textAlign='center';
-  ctx.font='bold 42px monospace';ctx.fillStyle=C.yellow;ctx.fillText('DUCK HUNT AR',W/2,H*.10+52);
-  ctx.font='13px monospace';ctx.fillStyle=C.white;
-  ['✌  HOLD INDEX + MIDDLE FINGER UP LIKE A GUN',
-   '👍  KEEP THUMB OPEN AND UP TO AIM',
-   '🔫  PRESS THUMB IN LIKE A TRIGGER TO SHOOT',
-   '🦆  HIT BOTH DUCKS — 3 BULLETS PER ROUND',
-  ].forEach((l,i)=>ctx.fillText(l,W/2,H*.10+92+i*30));
-  // start circle — positioned in sky area, well above HUD
-  readyPulse+=0.06;
-  const pr=82+Math.sin(readyPulse)*6,px=W/2,py=H*.55;
-  ctx.save();ctx.translate(px,py);
-  ctx.shadowColor='#00ff99';ctx.shadowBlur=28;
-  ctx.beginPath();ctx.arc(0,0,pr,0,Math.PI*2);ctx.fillStyle='#06D6A0';ctx.fill();
-  try{const sh=ctx.createRadialGradient(-pr*.3,-pr*.3,1,-pr*.3,-pr*.3,pr*.7);sh.addColorStop(0,'rgba(255,255,255,0.42)');sh.addColorStop(1,'rgba(255,255,255,0)');ctx.shadowBlur=0;ctx.fillStyle=sh;ctx.beginPath();ctx.arc(0,0,pr,0,Math.PI*2);ctx.fill();}catch(e){}
-  ctx.shadowBlur=0;ctx.fillStyle=C.black;ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('PRESS THUMB',0,-10);ctx.fillText('TO START!',0,12);
+// ── Ready Screen (HOME) ───────────────────────────────────────────────────────
+let startBtnX, startBtnY, startBtnR;
+let readyPulse = 0;
+
+// Practice ducks on home screen (3x3 grid top-right)
+const practiceDucks = [];
+(function initPracticeDucks(){
+  for(let row=0;row<3;row++) for(let col=0;col<3;col++){
+    practiceDucks.push({
+      col,row,
+      flap:Math.floor(Math.random()*2),
+      flapTimer:Math.floor(Math.random()*12),
+      hit:false,
+      hitTimer:0,
+      floatPhase:Math.random()*Math.PI*2,
+    });
+  }
+})();
+
+// Home screen shot effects (bang on screen)
+let homeShotEffects = [];
+
+function drawNESArrow(x1,y1,x2,y2){
+  ctx.save();
+  // 3D shadow
+  ctx.strokeStyle='rgba(0,0,0,0.7)';ctx.lineWidth=5;
+  ctx.beginPath();ctx.moveTo(x1+3,y1+3);ctx.lineTo(x2+3,y2+3);ctx.stroke();
+  const ang=Math.atan2(y2-y1,x2-x1),hs=13;
+  ctx.fillStyle='rgba(0,0,0,0.7)';
+  ctx.beginPath();ctx.moveTo(x2+3,y2+3);
+  ctx.lineTo(x2+3-hs*Math.cos(ang-0.45),y2+3-hs*Math.sin(ang-0.45));
+  ctx.lineTo(x2+3-hs*Math.cos(ang+0.45),y2+3-hs*Math.sin(ang+0.45));
+  ctx.closePath();ctx.fill();
+  // white arrow
+  ctx.strokeStyle=C.white;ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  ctx.fillStyle=C.white;
+  ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-hs*Math.cos(ang-0.45),y2-hs*Math.sin(ang-0.45));
+  ctx.lineTo(x2-hs*Math.cos(ang+0.45),y2-hs*Math.sin(ang+0.45));
+  ctx.closePath();ctx.fill();
   ctx.restore();
+}
+
+function drawNESLabel(x,y,lines,align,size){
+  const fs=size||13;
+  ctx.save();
+  ctx.font=`bold ${fs}px monospace`;
+  ctx.textAlign=align||'left';
+  ctx.textBaseline='top';
+  const lh=fs+5;
+  // 3D shadow offset
+  ctx.fillStyle='rgba(0,0,0,0.9)';
+  lines.forEach((l,i)=>ctx.fillText(l,x+2,y+i*lh+2));
+  ctx.fillStyle='rgba(0,0,0,0.9)';
+  lines.forEach((l,i)=>ctx.fillText(l,x+3,y+i*lh+3));
+  ctx.fillStyle=C.white;
+  lines.forEach((l,i)=>ctx.fillText(l,x,y+i*lh));
+  ctx.restore();
+}
+
+// Mini duck pixel for practice grid
+function drawMiniDuck(x,y,s,flap,pal){
+  const px=(arr,c)=>{ctx.fillStyle=c;arr.forEach(([dx,dy])=>ctx.fillRect(x+dx*s,y+dy*s,s,s));};
+  px([[0,2],[1,2],[2,2],[3,2],[4,2],[1,3],[2,3],[3,3],[4,3],[5,3],[2,4],[3,4],[4,4]],pal.wing);
+  px([[2,1],[3,1],[4,1],[5,1],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,3],[2,3]],pal.body);
+  px(flap?[[0,1],[1,1],[0,0],[1,0]]:[[0,3],[1,4],[0,4]],pal.body);
+  px([[6,1],[7,1],[8,1],[6,2],[7,2]],pal.head);
+  px([[8,2],[9,2],[9,1]],pal.beak);
+  px([[2,5],[3,5]],pal.feet);
+  ctx.fillStyle='#000';ctx.fillRect(x+7*s+1,y+1*s+1,s-1,s-1);
+  ctx.fillStyle='#f8f8f8';ctx.fillRect(x+7*s+1,y+1*s+1,3,3);
+}
+
+const miniPals=[
+  {body:'#5a46d6',head:'#e87ab8',beak:'#fc8c30',feet:'#fc8c30',wing:'#f8f8f8'},
+  {body:'#1e6a00',head:'#006800',beak:'#fcd000',feet:'#fc7460',wing:'#f8f8f8'},
+  {body:'#8a3800',head:'#6a2800',beak:'#fc8c30',feet:'#fc8c30',wing:'#f8f8f8'},
+];
+
+function drawReady(){
+  const W=canvas.width, H=canvas.height;
+  drawScene(); drawGrass();
+
+  // ── Responsive scale ───────────────────────────────────────────────────────
+  const scale = Math.min(W/1280, H/720);
+
+  // ── Title box — NES block style matching loading screen ───────────────────
+  const titleFs = Math.round(Math.max(28, 42*scale));
+  const subFs = Math.round(Math.max(10, 13*scale));
+  ctx.font=`bold ${titleFs}px monospace`;
+  const titleTextW = ctx.measureText('DUCK HUNT AR').width;
+  const titleW = Math.min(titleTextW + 80*scale, W*0.85);
+  const titleH = (titleFs + subFs + 44)*scale;
+  const titleX = (W-titleW)/2, titleY = H*0.03;
+
+  // NES box shadow
+  ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(titleX+8,titleY+8,titleW,titleH+8);
+  ctx.fillStyle='#000';ctx.fillRect(titleX,titleY,titleW,titleH);
+  ctx.strokeStyle=C.white;ctx.lineWidth=5;ctx.strokeRect(titleX,titleY,titleW,titleH);
+  ctx.strokeStyle='#555';ctx.lineWidth=2;ctx.strokeRect(titleX+6,titleY+6,titleW-12,titleH-12);
+  ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.strokeRect(titleX+6,titleY+6,titleW-12,titleH-12);
+
+  // Title text: yellow with red 3D shadow
+  ctx.font=`bold ${titleFs}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
+  const titleMidY = titleY + titleH*0.44;
+  ctx.fillStyle='#8a1000';ctx.fillText('DUCK HUNT AR',W/2+6,titleMidY+6);
+  ctx.fillStyle='#d82800';ctx.fillText('DUCK HUNT AR',W/2+3,titleMidY+3);
+  ctx.fillStyle=C.yellow;ctx.fillText('DUCK HUNT AR',W/2,titleMidY);
+
+  // Sub copy: green, blinking
+  if(Math.floor(Date.now()/600)%2===0){
+    ctx.font=`bold ${subFs}px monospace`;ctx.fillStyle='#98d800';
+    ctx.fillText('POINT YOUR FINGER. SHOOT WITH YOUR THUMB.',W/2,titleY+titleH*0.82);
+  }
+
+  // ── HOW TO HOLD copy block with hand INSIDE ────────────────────────────────
+  const copyFs = Math.round(Math.min(11*scale, 13));
+  const copyLh = copyFs + 7;
+  const copyLines = [
+    'HOW TO HOLD YOUR HAND:',
+    '',
+    'Keep hand parallel to camera.',
+    'Thumb + 2 fingers visible.',
+    '',
+    'INDEX + MIDDLE = AIM',
+    'PRESS THUMB    = SHOOT',
+  ];
+  ctx.font=`bold ${copyFs}px monospace`;
+  const maxCopyW = copyLines.reduce((m,l)=>Math.max(m,ctx.measureText(l).width),0);
+
+  // Hand (50% smaller than original)
+  const HAND_PX = Math.max(4, Math.round(5 * scale));
+  const handW = HAND_COLS * HAND_PX;
+  const handH = HAND_ROWS * HAND_PX;
+
+  const textBlockH = copyLines.length * copyLh + 20;
+  const boxInnerH = Math.max(handH + 24, textBlockH);
+  const bw = maxCopyW + handW + 48*scale + 32;
+  const bh = boxInnerH + 28;
+  const copyX = (W - bw) / 2;
+  const copyY = titleY + titleH + H*0.03;
+
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.80)';ctx.fillRect(copyX,copyY,bw,bh);
+  ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=2;ctx.strokeRect(copyX,copyY,bw,bh);
+
+  // Draw text on left inside box
+  ctx.font=`bold ${copyFs}px monospace`;ctx.textAlign='left';ctx.textBaseline='top';
+  const textX = copyX + 14;
+  const textY = copyY + 14;
+  copyLines.forEach((l,i)=>{
+    ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillText(l,textX+2,textY+i*copyLh+2);
+    ctx.fillStyle= i===0 ? C.yellow : (l.includes('INDEX')||l.includes('PRESS')) ? C.white : 'rgba(255,255,255,0.78)';
+    ctx.fillText(l,textX,textY+i*copyLh);
+  });
+
+  // Draw hand on right inside box, vertically centered
+  const handAreaX = copyX + maxCopyW + 40*scale;
+  const handCX = handAreaX + handW/2 + 8;
+  const handCY = copyY + bh/2;
+  drawPixelHand(handCX, handCY, HAND_PX);
+  ctx.restore();
+
+  // ── START button ──────────────────────────────────────────────────────────
+  readyPulse += 0.06;
+  const pr = Math.round((70 + Math.sin(readyPulse) * 5) * scale);
+  const bx = W * 0.82, by = H * 0.50;
+  startBtnX = bx; startBtnY = by; startBtnR = pr;
+
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.shadowColor = '#06D6A0'; ctx.shadowBlur = Math.abs(Math.sin(readyPulse)) * 28 + 8;
+  ctx.beginPath(); ctx.arc(0,0,pr,0,Math.PI*2);
+  ctx.fillStyle = '#06D6A0'; ctx.fill();
+  try{
+    const sh=ctx.createRadialGradient(-pr*.3,-pr*.3,1,-pr*.3,-pr*.3,pr*.7);
+    sh.addColorStop(0,'rgba(255,255,255,0.42)');sh.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.shadowBlur=0;ctx.fillStyle=sh;ctx.beginPath();ctx.arc(0,0,pr,0,Math.PI*2);ctx.fill();
+  }catch(e){}
+  ctx.shadowBlur=0;
+  const bfs=Math.round(13*scale);
+  ctx.font=`bold ${bfs}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=C.black;
+  ctx.fillText('AIM HERE',0,-(bfs+2));
+  ctx.fillText('+ SHOOT',0,2);
+  ctx.fillText('TO START',0,bfs+6);
+  ctx.restore();
+
+  // ── Practice duck grid — CENTERED below title, progressive reveal ─────────
+  // Count how many ducks have been shot (permanently dead = shot and hitTimer expired)
+  const totalShot = practiceDucks.filter(d=>d.permanentlyShot).length;
+  // Number to show: start at 1, add 1 for each shot, up to 9
+  const ducksToShow = Math.min(9, totalShot + 1);
+
+  const gridCols=3, gridRows=3;
+  const ds=Math.max(4, Math.round(5*scale));
+  const duckW=10*ds, duckH=6*ds;
+  const gridPad=14*scale;
+  const gridW=gridCols*duckW + (gridCols-1)*gridPad;
+  const gridH=gridRows*duckH + (gridRows-1)*gridPad;
+  // Center horizontally, place below copy box
+  const gridX = (W - gridW) / 2;
+  const gridY = copyY + bh + H*0.04;
+
+  // "PRACTICE SHOOTING" label above grid
+  const practiceFs=Math.round(12*scale);
+  ctx.save();
+  ctx.font=`bold ${practiceFs}px monospace`;
+  ctx.textAlign='center';ctx.textBaseline='bottom';
+  ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillText('PRACTICE SHOOTING',W/2+2,gridY-6+2);
+  ctx.fillStyle=C.yellow;ctx.fillText('PRACTICE SHOOTING',W/2,gridY-6);
+
+  if(totalShot===9){
+    const allFs=Math.round(10*scale);
+    ctx.font=`bold ${allFs}px monospace`;
+    ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillText('ALL DUCKS HIT! WELL DONE!',W/2+2,gridY-6+allFs+10+2);
+    ctx.fillStyle='#98d800';ctx.fillText('ALL DUCKS HIT! WELL DONE!',W/2,gridY-6+allFs+10);
+  }
+  ctx.restore();
+
+  // Grid box
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.28)';
+  ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=2;
+  ctx.fillRect(gridX-10,gridY-10,gridW+20,gridH+20);
+  ctx.strokeRect(gridX-10,gridY-10,gridW+20,gridH+20);
+  ctx.restore();
+
+  // Update and draw practice ducks — only show up to ducksToShow
+  const now=Date.now();
+  practiceDucks.forEach((d,i)=>{
+    // Only render if within the visible count
+    if(i >= ducksToShow) return;
+
+    d.flapTimer++;
+    if(d.flapTimer>10){d.flap=(d.flap+1)%2;d.flapTimer=0;}
+    const bob=Math.sin(now*0.002+d.floatPhase)*4*scale;
+    const dx=gridX+d.col*(duckW+gridPad);
+    const dy=gridY+d.row*(duckH+gridPad)+bob;
+    d.screenX=dx+duckW/2; d.screenY=dy+duckH/2;
+
+    if(d.hit){
+      d.hitTimer--;
+      if(d.hitTimer<=0){d.hit=false; d.permanentlyShot=true;}
+      ctx.save();ctx.globalAlpha=d.hitTimer/40;
+      ctx.font=`bold ${Math.round(16*scale)}px monospace`;
+      ctx.fillStyle=C.yellow;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('💥',dx+duckW/2,dy+duckH/2-(40-d.hitTimer)*0.4*scale);
+      ctx.restore();
+    } else if(!d.permanentlyShot){
+      drawMiniDuck(dx, dy, ds, d.flap, miniPals[i%3]);
+    }
+  });
+
+  // Home shot effects (BANG)
+  homeShotEffects = homeShotEffects.filter(s=>now-s.t<500);
+  for(const s of homeShotEffects){
+    const age=now-s.t, life=1-age/500;
+    ctx.save();ctx.globalAlpha=life*life;
+    ctx.strokeStyle=s.duck?C.yellow:C.white;
+    ctx.lineWidth=3;ctx.shadowColor=s.duck?C.yellow:C.white;ctx.shadowBlur=10;
+    ctx.beginPath();ctx.arc(s.x,s.y,14+age/10,0,Math.PI*2);ctx.stroke();
+    if(life>0.3){
+      ctx.shadowBlur=10;
+      ctx.font=`bold ${Math.round(22*scale)}px monospace`;
+      ctx.fillStyle=s.duck?C.yellow:C.white;ctx.textAlign='center';
+      ctx.globalAlpha=life;
+      ctx.fillText('BANG!',s.x,s.y-28-age*0.04);
+    }
+    ctx.restore();
+  }
+
+  drawHUD();
+  drawStatus();
+  drawCrosshair(smoothAim.x, smoothAim.y);
 }
 
 // ── Game Over ─────────────────────────────────────────────────────────────────
 function drawGameOver(){
-  drawScene();drawGrass();drawHUD();drawCrosshair(smoothAim.x,smoothAim.y);drawStatus();
+  drawScene();drawGrass();drawHUD();drawStatus();
+  drawCrosshair(smoothAim.x,smoothAim.y);
   const W=canvas.width,H=canvas.height;
   ctx.fillStyle='rgba(0,0,0,0.80)';ctx.fillRect(W/2-245,H*.22,490,265);
   ctx.strokeStyle=C.red;ctx.lineWidth=4;ctx.strokeRect(W/2-245,H*.22,490,265);
@@ -655,7 +829,7 @@ function drawGameOver(){
   ctx.font='bold 20px monospace';ctx.fillStyle=C.white;ctx.fillText('FINAL: '+String(score).padStart(6,'0'),W/2,H*.22+108);
   ctx.font='14px monospace';ctx.fillStyle=C.yellow;ctx.fillText('ROUND '+round+'   DUCKS HIT: '+ducksHit,W/2,H*.22+144);
   ctx.font='bold 13px monospace';ctx.fillStyle=Math.floor(Date.now()/500)%2===0?C.white:'#555';
-  ctx.fillText('PRESS THUMB TO PLAY AGAIN',W/2,H*.22+212);
+  ctx.fillText('AIM AT SCREEN + SHOOT TO PLAY AGAIN',W/2,H*.22+212);
 }
 
 // ── Game Logic ────────────────────────────────────────────────────────────────
@@ -682,13 +856,41 @@ function onRoundEnd(){
 }
 
 function shoot(){
+  if(state==='ready'){
+    const aim=stableAim();
+    muzzleFlash=10;
+    // Count visible ducks
+    const totalShot = practiceDucks.filter(d=>d.permanentlyShot).length;
+    const ducksToShow = Math.min(9, totalShot + 1);
+    let hitDuck=false;
+    practiceDucks.forEach((d,i)=>{
+      if(i >= ducksToShow) return; // not visible yet
+      if(!d.hit && !d.permanentlyShot && Math.hypot(aim.x-d.screenX,aim.y-d.screenY)<40){
+        d.hit=true; d.hitTimer=40;
+        hitDuck=true;
+        homeShotEffects.push({x:aim.x,y:aim.y,t:Date.now(),duck:true});
+      }
+    });
+    if(!hitDuck){
+      homeShotEffects.push({x:aim.x,y:aim.y,t:Date.now(),duck:false});
+    }
+    // Start game only if aimed at green button
+    if(Math.hypot(aim.x-startBtnX,aim.y-startBtnY)<=startBtnR){
+      startGame();
+    }
+    return;
+  }
+  if(state==='gameover'){
+    startGame();
+    return;
+  }
   if(state!=='playing'||bulletsLeft<=0)return;
   const aim=stableAim();
   bulletsLeft--;muzzleFlash=10;
   let hit=false;
   for(const d of ducks){
     if(d.dead||d.hit)continue;
-    if(Math.hypot(aim.x-d.x,aim.y-d.y)<70){ // bigger hit radius for bigger ducks
+    if(Math.hypot(aim.x-d.x,aim.y-d.y)<70){
       d.hit=true;d.falling=true;d.popup=42;d.fallVy=-2.5;
       score+=500;ducksHit++;
       totalHits.push(true);if(totalHits.length>10)totalHits.shift();
@@ -708,9 +910,15 @@ function shoot(){
 }
 
 // ── Main Loop ─────────────────────────────────────────────────────────────────
+let frameCount = 0;
 function render(){
+  frameCount++;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   updateAim();
+
+  // Animate pixel hand frames every ~20 game frames
+  handFlipTimer++;
+  if(handFlipTimer > 20){ handFrame = handFrame === 0 ? 1 : 0; handFlipTimer = 0; }
 
   if(state==='ready'){
     drawReady();
@@ -729,8 +937,9 @@ function render(){
       feathers[i].update();feathers[i].draw();if(feathers[i].life<=0)feathers.splice(i,1);
     }
     drawEffects();drawHUD();drawStatus();
-    drawCrosshair(smoothAim.x,smoothAim.y);
     drawNoGunWarning();
+    // Crosshair always drawn LAST to xhCanvas (top layer)
+    drawCrosshair(smoothAim.x,smoothAim.y);
     const allGone=ducks.length>0&&ducks.every(d=>d.dead||(d.y>canvas.height+100));
     if(allGone&&!nextRoundTimer)onRoundEnd();
   } else if(state==='gameover'){
@@ -747,7 +956,6 @@ function initHandTracking(){
     const now=Date.now();
     if(results.multiHandLandmarks&&results.multiHandLandmarks.length){
       const lm=results.multiHandLandmarks[0];
-      // Always track index finger position regardless of gun pose
       rawAim.x=(1-lm[8].x)*canvas.width;
       rawAim.y=lm[8].y*canvas.height;
       isGunPose=detectGunPose(lm);
@@ -755,15 +963,14 @@ function initHandTracking(){
         lastSeen=now;
         const fired=checkThumbShoot(lm,now);
         if(fired){
-          if(state==='ready'||state==='gameover')startGame();
-          else if(state==='playing')shoot();
+          if(state==='gameover') startGame();
+          else shoot(); // shoot() handles both ready and playing states
         }
       } else {
         thumbState='unknown';stableCount=0;openBaseline=null;
       }
     } else {
       isGunPose=false;
-      // rawAim not updated — X stays frozen at last position
       if(now-lastSeen>DROPOUT_GRACE){thumbState='unknown';stableCount=0;openBaseline=null;}
     }
   });
