@@ -9,7 +9,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    background: var(--bg);
+    background: #f5f2ee;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -18,62 +18,52 @@
     max-width: 860px;
     margin: 0 auto;
     font-family: 'DM Mono', monospace;
-    transition: background 0.3s;
-  }
-
-  :root {
-    --bg: #000;
-    --canvas-bg: #000;
-    --border: #444;
-    --shadow: #333;
-    --text: #fff;
-    --text-muted: #888;
-    --text-footer: #444;
-    --btn-bg: #000;
-  }
-  body.light {
-    --bg: #f5f2ee;
-    --canvas-bg: #fff;
-    --border: #1a1a1a;
-    --shadow: #1a1a1a;
-    --text: #1a1a1a;
-    --text-muted: #888;
-    --text-footer: #bbb;
-    --btn-bg: #fff;
   }
 
   .wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; padding: 24px 40px; }
 
-  .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--border); padding-bottom: 12px; width: 100%; transition: border-color 0.3s; }
-  .title { font-size: 22px; font-weight: 300; letter-spacing: -1px; color: var(--text); transition: color 0.3s; }
+  .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #d0d0c8; padding-bottom: 12px; width: 100%; }
+  .title { font-size: 22px; font-weight: 300; letter-spacing: -1px; color: #1a1a1a; }
   .title strong { font-weight: 700; }
-  .counts { font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px; text-align: right; line-height: 1.8; }
+  .counts { font-size: 11px; color: #888; letter-spacing: 0.5px; text-align: right; line-height: 1.8; }
 
-  #game-canvas { background: var(--canvas-bg); border: 1.5px solid var(--border); cursor: default; display: block; box-shadow: 4px 4px 0px var(--shadow); transition: background 0.3s, border-color 0.3s, box-shadow 0.3s; }
+  #game-canvas { border: 1.5px solid #1a1a1a; cursor: default; display: block; box-shadow: 4px 4px 0px #1a1a1a; }
 
-  .btn-row { display: flex; gap: 10px; align-items: center; }
+  .btn-row { display: flex; gap: 10px; align-items: stretch; }
 
   .ctrl-btn {
-    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
-    background: var(--btn-bg); color: var(--text); border: 1.5px solid var(--border); padding: 8px 22px; cursor: pointer;
-    box-shadow: 3px 3px 0px var(--shadow); transition: box-shadow 0.1s, transform 0.1s, background 0.3s, color 0.3s, border-color 0.3s;
-    display: flex; align-items: center; gap: 7px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    background: #fff;
+    color: #1a1a1a;
+    border: 1.5px solid #1a1a1a;
+    padding: 0 22px;
+    height: 38px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0px #1a1a1a;
+    transition: box-shadow 0.1s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    white-space: nowrap;
   }
-  .ctrl-btn:hover { box-shadow: 1px 1px 0px var(--shadow); transform: translate(2px, 2px); }
+  .ctrl-btn:hover { box-shadow: 1px 1px 0px #1a1a1a; transform: translate(2px, 2px); }
   .ctrl-btn:active { box-shadow: none; transform: translate(3px, 3px); }
 
-  /* Bulb SVG styles */
   .bulb-off .bulb-glow { display: none; }
-  .bulb-off .bulb-glass { fill: #555; }
-  .bulb-off .bulb-base { fill: #444; }
-  .bulb-off .bulb-filament { stroke: #333; }
+  .bulb-off .bulb-glass { fill: #888; }
+  .bulb-off .bulb-base { fill: #666; }
+  .bulb-off .bulb-filament { stroke: #555; }
 
   .bulb-on .bulb-glow { display: block; }
   .bulb-on .bulb-glass { fill: #ffe066; }
-  .bulb-on .bulb-base { fill: #bbb; }
+  .bulb-on .bulb-base { fill: #aaa; }
   .bulb-on .bulb-filament { stroke: #f90; }
 
-  .footer { font-size: 10px; letter-spacing: 0.2em; color: var(--text-footer); text-transform: uppercase; transition: color 0.3s; }
+  .footer { font-size: 10px; letter-spacing: 0.2em; color: #ccc; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -85,14 +75,14 @@
   <canvas id="game-canvas"></canvas>
   <div class="btn-row">
     <button class="ctrl-btn" onclick="restartGame()">
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
         <path d="M11 6.5A4.5 4.5 0 1 1 6.5 2a4.47 4.47 0 0 1 3 1.15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         <polyline points="9.5,1 9.5,3.5 12,3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       restart
     </button>
     <button class="ctrl-btn" id="mute-btn" onclick="toggleMute()">
-      <svg id="vol-icon" width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
         <polygon points="2,5 5,5 8,2 8,13 5,10 2,10" fill="currentColor"/>
         <g id="vol-waves">
           <path d="M10 5.5a3 3 0 0 1 0 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/>
@@ -105,19 +95,15 @@
       </svg>
       volume
     </button>
-    <button class="ctrl-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark">
-      <svg id="bulb-svg" class="bulb-off" width="16" height="20" viewBox="0 0 16 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- glow halo -->
-        <circle class="bulb-glow" cx="8" cy="7.5" r="7" fill="#ffe06644" />
-        <!-- glass bulb -->
+    <button class="ctrl-btn" id="lights-btn" onclick="toggleLights()">
+      <svg id="bulb-svg" class="bulb-off" width="14" height="18" viewBox="0 0 16 20" fill="none">
+        <circle class="bulb-glow" cx="8" cy="7.5" r="7" fill="#ffe06644"/>
         <path class="bulb-glass" d="M3 7.5a5 5 0 1 1 7.5 4.33V13H5.5v-1.17A5 5 0 0 1 3 7.5z"/>
-        <!-- base segments -->
         <rect class="bulb-base" x="5.5" y="13" width="5" height="1.2" rx="0.4"/>
         <rect class="bulb-base" x="5.5" y="14.5" width="5" height="1.2" rx="0.4"/>
-        <!-- filament -->
         <path class="bulb-filament" d="M6.5 11.5 Q8 9.5 9.5 11.5" stroke-width="1.1" stroke-linecap="round" fill="none"/>
       </svg>
-      theme
+      lights
     </button>
   </div>
   <div class="footer">watch · wait · winner</div>
@@ -159,9 +145,8 @@ function toggleMute() {
   document.getElementById('vol-mute').style.display = muted ? 'block' : 'none';
 }
 
-function toggleTheme() {
+function toggleLights() {
   lightMode = !lightMode;
-  document.body.classList.toggle('light', lightMode);
   const bulb = document.getElementById('bulb-svg');
   bulb.className = lightMode ? 'bulb-on' : 'bulb-off';
 }
@@ -196,11 +181,18 @@ function updateCounts() {
   document.getElementById('counts').innerHTML=`🪨 ${r} &nbsp; 📄 ${p} &nbsp; ✂️ ${s}`;
 }
 
+function getWinnerLabel(typeSet) {
+  const t = [...typeSet][0];
+  if (t === ROCK) return 'ROCK 🪨 wins!';
+  if (t === PAPER) return 'PAPER 📄 wins!';
+  return 'SCISSORS ✂️ win!';
+}
+
 function draw() {
   const bg = lightMode ? '#ffffff' : '#000000';
   const winnerOverlay = lightMode ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.80)';
   const winnerText = lightMode ? '#1a1a1a' : '#ffcc00';
-  const winnerStroke = lightMode ? '#fff' : '#000';
+  const winnerStroke = lightMode ? 'rgba(255,255,255,0.8)' : '#000';
 
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
@@ -229,13 +221,13 @@ function draw() {
   updateCounts();
   const types=new Set(elements.map(e=>e.type));
   if (types.size===1) {
-    winner=['ROCK 🪨','PAPER 📄','SCISSORS ✂️'][[...types][0]];
+    const label = getWinnerLabel(types);
     ctx.fillStyle=winnerOverlay; ctx.fillRect(0,0,W,H);
     ctx.font='700 42px "DM Serif Display",serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.strokeStyle=winnerStroke; ctx.lineWidth=4;
-    ctx.strokeText(winner+' wins!',W/2,H/2);
-    ctx.fillStyle=winnerText; ctx.fillText(winner+' wins!',W/2,H/2);
+    ctx.strokeText(label, W/2, H/2);
+    ctx.fillStyle=winnerText; ctx.fillText(label, W/2, H/2);
     return;
   }
   animId=requestAnimationFrame(draw);
