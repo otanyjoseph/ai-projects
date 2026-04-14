@@ -16,16 +16,13 @@
   @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } }
   .status-text { color: #fff; font-size: 22px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.8; }
   .status-sub { color: rgba(255,255,255,0.4); font-size: 13px; letter-spacing: 2px; margin-top: 10px; text-transform: uppercase; }
-  /* Scrim sits BELOW the action canvas */
   #gameover-scrim { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 10; opacity: 0; pointer-events: none; transition: opacity 0.5s; }
   #gameover-scrim.show { opacity: 1; }
-  /* Text above scrim */
   #gameover-text { position: absolute; top: 0; left: 0; width: 100%; height: 42%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 15; opacity: 0; pointer-events: none; transition: opacity 0.5s; }
   #gameover-text.show { opacity: 1; }
   #gameover-text h1 { color: #ff3333; font-size: 72px; text-shadow: 0 0 30px rgba(255,50,50,0.8), 0 0 60px rgba(255,50,50,0.4); letter-spacing: 4px; margin-bottom: 16px; animation: glitch 0.3s ease-in-out infinite alternate; }
   @keyframes glitch { 0% { text-shadow: 0 0 30px rgba(255,50,50,0.8), -2px 0 rgba(0,255,255,0.5); } 100% { text-shadow: 0 0 30px rgba(255,50,50,0.8), 2px 0 rgba(255,0,255,0.5); } }
   #final-score { color: #fff; font-size: 32px; letter-spacing: 2px; }
-  /* Action canvas is topmost */
   #action-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
 </style>
 </head>
@@ -64,6 +61,33 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
+// ─── Emoji cache ──────────────────────────────────────────────────────────────
+// Safari cannot render emoji via ctx.fillText() on a visible canvas.
+// Fix: draw emoji onto a hidden offscreen canvas once, then use drawImage().
+const emojiCache = {};
+function getEmojiCanvas(emoji, size) {
+  const key = emoji + '_' + size;
+  if (emojiCache[key]) return emojiCache[key];
+  const oc = document.createElement('canvas');
+  oc.width = size; oc.height = size;
+  const oc2d = oc.getContext('2d');
+  oc2d.font = Math.floor(size * 0.8) + 'px serif';
+  oc2d.textAlign = 'center';
+  oc2d.textBaseline = 'middle';
+  oc2d.fillText(emoji, size / 2, size / 2);
+  emojiCache[key] = oc;
+  return oc;
+}
+function drawEmoji(c, emoji, x, y, radius, rotation) {
+  const size = Math.ceil(radius * 2) * 2; // 2x for sharpness
+  const img = getEmojiCanvas(emoji, size);
+  c.save();
+  c.translate(x, y);
+  if (rotation) c.rotate(rotation);
+  c.drawImage(img, -radius, -radius, radius * 2, radius * 2);
+  c.restore();
+}
+
 let score = 0, lives = 3, gameActive = false, gameOverFlag = false, readyToStart = false;
 let fruits = [], particles = [], halfFruits = [], slashTrail = [];
 let lastSliceTime = 0, frameCount = 0;
@@ -80,7 +104,7 @@ const FRUIT_COLORS = [
   { fill: '#FB5607', glow: '#ff6600' },
 ];
 
-// ─── ActionCircle — drawn on top-layer actionCanvas ──────────────────────────
+// ─── ActionCircle ─────────────────────────────────────────────────────────────
 class ActionCircle {
   constructor(label, emoji, color) {
     this.r = 110;
@@ -94,20 +118,23 @@ class ActionCircle {
     if (this.sliced) return;
     const cy = this.y + this.wobble;
     const r = this.r + Math.sin(this.pulse * 1.3) * 5;
+    // glow ring
     c.save();
-    c.translate(this.x, cy);
-    c.beginPath(); c.arc(0, 0, r + 18, 0, Math.PI * 2);
+    c.beginPath(); c.arc(this.x, cy, r + 18, 0, Math.PI * 2);
     c.strokeStyle = this.color.glow; c.lineWidth = 4;
     c.globalAlpha = 0.4 + Math.sin(this.pulse) * 0.2;
     c.shadowColor = this.color.glow; c.shadowBlur = 40; c.stroke();
     c.globalAlpha = 1; c.shadowBlur = 0;
-    c.font = `${r * 1.7}px serif`;
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(this.emoji, 0, 4);
+    c.restore();
+    // emoji
+    drawEmoji(c, this.emoji, this.x, cy, r, 0);
+    // label
+    c.save();
     c.font = 'bold 17px Arial Black'; c.fillStyle = '#fff';
+    c.textAlign = 'center'; c.textBaseline = 'top';
     c.shadowColor = 'rgba(0,0,0,1)'; c.shadowBlur = 10;
     const lines = this.label.split('\n');
-    lines.forEach((line, i) => { c.fillText(line, 0, r + 28 + i * 22); });
+    lines.forEach((line, i) => { c.fillText(line, this.x, cy + r + 18 + i * 22); });
     c.restore();
   }
   hitTest(px, py) {
@@ -116,7 +143,7 @@ class ActionCircle {
   }
 }
 
-// ─── Fruit ───────────────────────────────────────────────────────────────────
+// ─── Fruit ────────────────────────────────────────────────────────────────────
 class Fruit {
   constructor(isBomb) {
     this.r = 62 + Math.random() * 22;
@@ -136,13 +163,7 @@ class Fruit {
   update() { this.vy += this.gravity; this.x += this.vx; this.y += this.vy; this.rotation += this.rotSpeed; }
   isOffScreen() { return this.y > canvas.height + this.r + 10; }
   draw() {
-    ctx.save();
-    ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
-    ctx.font = `${this.r * 2}px serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    if (this.isBomb) { ctx.shadowColor = 'rgba(255,60,0,0.8)'; ctx.shadowBlur = 22; }
-    ctx.fillText(this.emoji, 0, 0);
-    ctx.restore();
+    drawEmoji(ctx, this.emoji, this.x, this.y, this.r, this.rotation);
   }
 }
 
@@ -164,7 +185,7 @@ class Particle {
   }
 }
 
-// ─── Half Fruit ───────────────────────────────────────────────────────────────
+// ─── HalfFruit ────────────────────────────────────────────────────────────────
 class HalfFruit {
   constructor(x, y, emoji, dir, isBomb) {
     this.x = x; this.y = y; this.emoji = emoji; this.isBomb = isBomb;
@@ -175,12 +196,18 @@ class HalfFruit {
   update() { this.vy += this.gravity; this.x += this.vx; this.y += this.vy; this.rotation += this.rotSpeed; this.life -= this.decay; }
   draw() {
     if (this.life <= 0) return;
-    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
+    ctx.save();
     ctx.globalAlpha = this.life;
-    ctx.beginPath(); ctx.rect(-this.r * 1.5, -this.r * 1.5, this.r * 3, this.r * 1.5); ctx.clip();
-    ctx.font = `${this.r * 2}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    if (this.isBomb) { ctx.shadowColor = 'rgba(255,60,0,0.9)'; ctx.shadowBlur = 25; }
-    ctx.fillText(this.emoji, 0, 0); ctx.restore();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    // clip to top half for sliced look
+    ctx.beginPath();
+    ctx.rect(-this.r * 1.5, -this.r * 1.5, this.r * 3, this.r * 1.5);
+    ctx.clip();
+    ctx.rotate(-this.rotation);
+    ctx.translate(-this.x, -this.y);
+    drawEmoji(ctx, this.emoji, this.x, this.y, this.r, this.rotation);
+    ctx.restore();
   }
 }
 
@@ -271,14 +298,13 @@ function checkSlice() {
   fruits = fruits.filter(f => !f.sliced);
 }
 
-// ─── HUD with background boxes ───────────────────────────────────────────────
+// ─── HUD ──────────────────────────────────────────────────────────────────────
 function roundRect(c, x, y, w, h, r) {
   c.beginPath(); c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.quadraticCurveTo(x+w,y,x+w,y+r);
   c.lineTo(x+w,y+h-r); c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
   c.lineTo(x+r,y+h); c.quadraticCurveTo(x,y+h,x,y+h-r);
   c.lineTo(x,y+r); c.quadraticCurveTo(x,y,x+r,y); c.closePath();
 }
-
 function drawHUD() {
   ctx.save();
   // Score box
@@ -295,20 +321,22 @@ function drawHUD() {
   ctx.shadowBlur = 0; ctx.font = '13px Arial'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.fillText('SCORE', sX + 26, sY + sH + 10);
 
-  // Lives box
-  let hearts = '';
-  for (let i = 0; i < 3; i++) hearts += i < lives ? '❤️ ' : '🖤 ';
-  hearts = hearts.trim();
-  ctx.font = '40px Arial';
-  const hw = ctx.measureText(hearts).width;
-  const hW = hw + 44, hH = 68, hX = canvas.width - hW - 20, hY = 16;
+  // Lives box — draw hearts via drawImage (Safari-safe)
+  const heartR = 18;
+  const heartSpacing = heartR * 2 + 8;
+  const hW = 3 * heartSpacing + 20, hH = 68, hX = canvas.width - hW - 20, hY = 16;
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   roundRect(ctx, hX, hY, hW, hH, 18); ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1.5;
   roundRect(ctx, hX, hY, hW, hH, 18); ctx.stroke();
-  ctx.font = '40px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#fff';
-  ctx.fillText(hearts, hX + 22, hY + hH / 2);
+  for (let i = 0; i < 3; i++) {
+    const emoji = i < lives ? '❤️' : '🖤';
+    const ex = hX + 10 + heartR + i * heartSpacing;
+    const ey = hY + hH / 2;
+    ctx.globalAlpha = i < lives ? 1.0 : 0.35;
+    drawEmoji(ctx, emoji, ex, ey, heartR, 0);
+  }
+  ctx.globalAlpha = 1.0;
   ctx.restore();
 }
 
@@ -323,7 +351,7 @@ function drawReadyScreen() {
   ctx.shadowBlur = 0; ctx.font = '15px Arial'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.fillText('POINT YOUR INDEX FINGER  ·  SWIPE FAST TO SLICE', canvas.width/2, canvas.height * 0.33);
   ctx.font = '14px Arial'; ctx.fillStyle = 'rgba(255,120,120,0.9)';
-  ctx.fillText('⚠️  AVOID THE 💣 BOMB — instant game over!', canvas.width/2, canvas.height * 0.40);
+  ctx.fillText('AVOID THE BOMB — instant game over!', canvas.width/2, canvas.height * 0.40);
   ctx.restore();
 }
 
@@ -365,7 +393,6 @@ function gameLoop() {
     for (let i = particles.length - 1; i >= 0; i--) { particles[i].update(); particles[i].draw(); if (particles[i].life <= 0) particles.splice(i, 1); }
     drawTrail(); checkSlice();
 
-    // Action circles drawn on the TOP canvas (above everything)
     if (readyToStart && startCircle && !startCircle.sliced) { startCircle.update(); startCircle.draw(actx); }
     if (gameOverFlag && restartCircle && !restartCircle.sliced) { restartCircle.update(); restartCircle.draw(actx); }
 
@@ -394,7 +421,7 @@ function triggerGameOver() {
   restartCircle = new ActionCircle('SLICE ME TO\nPLAY AGAIN', '🍊', { fill: '#F72585', glow: '#ff0099' });
 }
 
-// ─── MediaPipe ────────────────────────────────────────────────────────────────
+// ─── MediaPipe Hand Tracking ──────────────────────────────────────────────────
 function initHandTracking() {
   const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
   hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.6 });
@@ -423,10 +450,9 @@ function initHandTracking() {
         </div>
         <a href="https://otanyjoseph.github.io/ai-projects/finger-tracking-fruit-ninja.html"
           target="_blank"
-          style="margin-top:16px;padding:16px 36px;background:linear-gradient(135deg,#06D6A0,#4CC9F0);color:#000;font-size:15px;font-weight:900;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border-radius:50px;box-shadow:0 0 30px rgba(6,214,160,0.5);display:inline-block;transition:transform 0.15s;"
-          onmouseover="this.style.transform='scale(1.05)'"
-          onmouseout="this.style.transform='scale(1)'"
-        >🎮 Open Full Experience →</a>
+          style="margin-top:16px;padding:16px 36px;background:linear-gradient(135deg,#06D6A0,#4CC9F0);color:#000;font-size:15px;font-weight:900;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border-radius:50px;box-shadow:0 0 30px rgba(6,214,160,0.5);display:inline-block;">
+          Open Full Experience →
+        </a>
         <div style="color:rgba(255,255,255,0.2);font-size:11px;letter-spacing:1px;margin-top:4px;">OPENS IN NEW TAB</div>
       </div>`;
   });
