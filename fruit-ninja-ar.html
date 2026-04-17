@@ -34,8 +34,6 @@
     pointer-events: none;
     -webkit-user-select: none; user-select: none;
     transform-origin: center center;
-    /* Force GPU layer for Safari */
-    -webkit-transform: translateZ(0);
     will-change: transform;
   }
 
@@ -45,7 +43,6 @@
     z-index: 6; pointer-events: none;
   }
 
-  /* Hearts: fixed, outside container, so Safari cannot clip them */
   #lives-display {
     position: fixed;
     top: 16px; right: 20px;
@@ -58,14 +55,12 @@
     padding: 10px 18px;
     pointer-events: none;
   }
-  .heart-el {
-    font-size: 34px;
-    line-height: 1;
-    -webkit-user-select: none; user-select: none;
-    transition: opacity 0.3s;
+  .heart-img {
+    width: 34px; height: 34px;
     display: block;
+    transition: opacity 0.3s;
   }
-  .heart-el.lost { opacity: 0.15; }
+  .heart-img.lost { opacity: 0.15; }
 
   #loading {
     position: absolute; top: 0; left: 0;
@@ -115,7 +110,7 @@
     display: flex; flex-direction: column; align-items: center;
     pointer-events: none; -webkit-user-select: none; user-select: none;
   }
-  .ac-emoji-el { line-height: 1; display: block; }
+  .ac-img { display: block; }
   .ac-label-el {
     color: #fff; font-family: 'Arial Black', sans-serif;
     font-size: 18px; font-weight: bold;
@@ -127,11 +122,11 @@
 </head>
 <body>
 
-<!-- Hearts OUTSIDE #container so Safari doesn't clip with overflow:hidden -->
+<!-- Hearts OUTSIDE #container, position:fixed so no clipping -->
 <div id="lives-display">
-  <span class="heart-el" id="heart-0">❤️</span>
-  <span class="heart-el" id="heart-1">❤️</span>
-  <span class="heart-el" id="heart-2">❤️</span>
+  <img class="heart-img" id="heart-0">
+  <img class="heart-img" id="heart-1">
+  <img class="heart-img" id="heart-2">
 </div>
 
 <div id="container">
@@ -160,6 +155,69 @@
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
 <script>
+// ─── THE FIX: Emoji → canvas → dataURL ───────────────────────────────────────
+//
+// Safari on iOS renders emoji correctly when painted to an offscreen canvas,
+// then read back as a PNG data URL. Using that data URL as an <img> src
+// bypasses the CSS/DOM emoji rendering bug that appears on GitHub Pages (HTTPS,
+// cross-origin MediaPipe scripts change the rendering context).
+//
+// This same technique is used for:
+//   1. Whole fruits (replacing div+textContent with img+dataURL)
+//   2. Half fruits (top/bottom halves via destination-out composite on canvas)
+//   3. Heart icons in the HUD
+//   4. Action-circle emoji (slice-to-start / slice-to-play-again)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const emojiCache = {};
+
+function emojiToDataURL(emoji, size) {
+  const key = emoji + '_' + size;
+  if (emojiCache[key]) return emojiCache[key];
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const cx = c.getContext('2d');
+  cx.font = Math.floor(size * 0.78) + 'px serif';
+  cx.textAlign = 'center';
+  cx.textBaseline = 'middle';
+  cx.fillText(emoji, size / 2, size / 2 + size * 0.04);
+  const url = c.toDataURL();
+  emojiCache[key] = url;
+  return url;
+}
+
+// Renders only the top (isTop=true) or bottom half of the emoji
+function emojiHalfToDataURL(emoji, size, isTop) {
+  const key = emoji + '_' + size + (isTop ? '_T' : '_B');
+  if (emojiCache[key]) return emojiCache[key];
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const cx = c.getContext('2d');
+  cx.font = Math.floor(size * 0.78) + 'px serif';
+  cx.textAlign = 'center';
+  cx.textBaseline = 'middle';
+  cx.fillText(emoji, size / 2, size / 2 + size * 0.04);
+  // Erase the unwanted half using destination-out
+  cx.globalCompositeOperation = 'destination-out';
+  cx.fillStyle = 'rgba(0,0,0,1)';
+  if (isTop) {
+    cx.fillRect(0, Math.floor(size / 2), size, Math.ceil(size / 2));
+  } else {
+    cx.fillRect(0, 0, size, Math.floor(size / 2));
+  }
+  const url = c.toDataURL();
+  emojiCache[key] = url;
+  return url;
+}
+
+function initHeartImages() {
+  const src = emojiToDataURL('❤️', 68);
+  for (let i = 0; i < 3; i++) {
+    document.getElementById('heart-' + i).src = src;
+  }
+}
+
+// ─── Core refs ────────────────────────────────────────────────────────────────
 const canvas     = document.getElementById('canvas');
 const ctx        = canvas.getContext('2d');
 const hudCanvas  = document.getElementById('hud-canvas');
@@ -193,19 +251,18 @@ function updateHearts() {
   const ld = document.getElementById('lives-display');
   ld.style.display = gameActive ? 'flex' : 'none';
   for (let i = 0; i < 3; i++) {
-    const h = document.getElementById('heart-' + i);
-    h.classList.toggle('lost', i >= lives);
+    document.getElementById('heart-' + i).classList.toggle('lost', i >= lives);
   }
 }
 
-// ─── Fruit (DOM) ──────────────────────────────────────────────────────────────
+// ─── Fruit (DOM <img> with canvas-rendered emoji) ─────────────────────────────
 class Fruit {
   constructor(isBomb) {
     this.isBomb   = isBomb || false;
     this.emoji    = this.isBomb ? BOMB_EMOJI : FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
     this.color    = this.isBomb ? {fill:'#555',glow:'#ff4400'} : FRUIT_COLORS[Math.floor(Math.random() * FRUIT_COLORS.length)];
     this.r        = 46 + Math.random() * 18;
-    this.fontSize = this.r * 2;
+    this.imgSize  = Math.round(this.r * 2.2);
     this.x        = this.r + Math.random() * (window.innerWidth - this.r * 2);
     this.y        = window.innerHeight + this.r;
     this.sliced   = false;
@@ -218,20 +275,22 @@ class Fruit {
     this.vy = Math.sin(angle) * speed;
     this.gravity  = 0.22;
 
-    this.el = document.createElement('div');
+    this.el = document.createElement('img');
     this.el.className = 'fruit-el';
-    this.el.textContent = this.emoji;
-    this.el.style.fontSize = this.fontSize + 'px';
+    // 2× the display size for retina sharpness
+    this.el.src = emojiToDataURL(this.emoji, this.imgSize * 2);
+    this.el.style.width  = this.imgSize + 'px';
+    this.el.style.height = this.imgSize + 'px';
     if (this.isBomb) this.el.style.filter = 'drop-shadow(0 0 10px #ff6600)';
     fruitLayer.appendChild(this.el);
     this._sync();
   }
 
   _sync() {
-    const off = this.fontSize * 0.55;
-    this.el.style.left      = (this.x - off) + 'px';
-    this.el.style.top       = (this.y - off) + 'px';
-    this.el.style.transform = `translateZ(0) rotate(${this.rotation}deg)`;
+    const half = this.imgSize / 2;
+    this.el.style.left      = (this.x - half) + 'px';
+    this.el.style.top       = (this.y - half) + 'px';
+    this.el.style.transform = `rotate(${this.rotation}deg)`;
   }
 
   update() {
@@ -249,11 +308,9 @@ class Fruit {
   }
 }
 
-// ─── Half Fruit (DOM, two separate halves using clip-path) ────────────────────
-// We create TWO divs per half: one clipped to top half, one to bottom half
-// clip-path works reliably in Safari unlike overflow:hidden on transformed elements
+// ─── Half Fruit (DOM <img> with half-emoji canvas render) ─────────────────────
 class HalfFruit {
-  constructor(x, y, emoji, fontSize, dir) {
+  constructor(x, y, emoji, imgSize, dir) {
     this.x = x; this.y = y;
     this.vx = dir * (4 + Math.random() * 5);
     this.vy = -7 - Math.random() * 5;
@@ -262,38 +319,27 @@ class HalfFruit {
     this.decay    = 0.016;
     this.rotation = dir * (5 + Math.random() * 15);
     this.rotSpeed = dir * (1.5 + Math.random() * 2.5);
-    this.fontSize = fontSize;
+    this.imgSize  = imgSize;
 
-    // Which half: dir=-1 → top half, dir=1 → bottom half
-    this.isTop = (dir === -1);
+    // dir === -1 → top half flies left; dir === 1 → bottom half flies right
+    const isTop = (dir === -1);
 
-    this.el = document.createElement('div');
+    this.el = document.createElement('img');
     this.el.className = 'fruit-el';
-    this.el.textContent = emoji;
-    this.el.style.fontSize = fontSize + 'px';
-    this.el.style.lineHeight = '1';
-
-    // clip-path: polygon that cuts the emoji in half
-    // Top half:    show upper 50%
-    // Bottom half: show lower 50%
-    if (this.isTop) {
-      this.el.style.clipPath = 'polygon(0% 0%, 100% 0%, 100% 50%, 0% 50%)';
-      this.el.style.webkitClipPath = 'polygon(0% 0%, 100% 0%, 100% 50%, 0% 50%)';
-    } else {
-      this.el.style.clipPath = 'polygon(0% 50%, 100% 50%, 100% 100%, 0% 100%)';
-      this.el.style.webkitClipPath = 'polygon(0% 50%, 100% 50%, 100% 100%, 0% 100%)';
-    }
+    this.el.src = emojiHalfToDataURL(emoji, imgSize * 2, isTop);
+    this.el.style.width  = imgSize + 'px';
+    this.el.style.height = imgSize + 'px';
 
     fruitLayer.appendChild(this.el);
     this._sync();
   }
 
   _sync() {
-    const off = this.fontSize * 0.55;
-    this.el.style.left      = (this.x - off) + 'px';
-    this.el.style.top       = (this.y - off) + 'px';
+    const half = this.imgSize / 2;
+    this.el.style.left      = (this.x - half) + 'px';
+    this.el.style.top       = (this.y - half) + 'px';
     this.el.style.opacity   = this.life;
-    this.el.style.transform = `translateZ(0) rotate(${this.rotation}deg)`;
+    this.el.style.transform = `rotate(${this.rotation}deg)`;
   }
 
   update() {
@@ -328,7 +374,7 @@ class Particle {
   }
 }
 
-// ─── Trail (canvas) ───────────────────────────────────────────────────────────
+// ─── Trail ────────────────────────────────────────────────────────────────────
 const TRAIL_LENGTH = 18;
 function addTrailPoint(x, y) { slashTrail.push({x, y, t: Date.now()}); if (slashTrail.length > TRAIL_LENGTH) slashTrail.shift(); }
 function drawTrail() {
@@ -351,28 +397,28 @@ function getTrailVelocity() {
   if (slashTrail.length < 3) return 0;
   const a = slashTrail[0], b = slashTrail[slashTrail.length - 1];
   const dx = b.x - a.x, dy = b.y - a.y, dt = (b.t - a.t) / 1000 || 0.001;
-  return Math.sqrt(dx * dx + dy * dy) / dt;
+  return Math.sqrt(dx*dx + dy*dy) / dt;
 }
-function lineCircleIntersect(x1, y1, x2, y2, cx, cy, r) {
-  const dx = x2-x1, dy = y2-y1, fx = x1-cx, fy = y1-cy;
-  const a = dx*dx+dy*dy, b = 2*(fx*dx+fy*dy), c = fx*fx+fy*fy-r*r;
-  let d = b*b-4*a*c; if (d < 0) return false; d = Math.sqrt(d);
-  const t1 = (-b-d)/(2*a), t2 = (-b+d)/(2*a);
+function lineCircleIntersect(x1,y1,x2,y2,cx,cy,r) {
+  const dx=x2-x1,dy=y2-y1,fx=x1-cx,fy=y1-cy;
+  const a=dx*dx+dy*dy,b=2*(fx*dx+fy*dy),c=fx*fx+fy*fy-r*r;
+  let d=b*b-4*a*c; if(d<0)return false; d=Math.sqrt(d);
+  const t1=(-b-d)/(2*a),t2=(-b+d)/(2*a);
   return (t1>=0&&t1<=1)||(t2>=0&&t2<=1);
 }
 
 // ─── Slice effects ────────────────────────────────────────────────────────────
-function spawnSliceEffect(x, y, color, emoji, fontSize) {
+function spawnSliceEffect(x, y, color, emoji, imgSize) {
   for (let p = 0; p < 20; p++) particles.push(new Particle(x, y, color));
-  halfFruits.push(new HalfFruit(x, y, emoji, fontSize, -1));
-  halfFruits.push(new HalfFruit(x, y, emoji, fontSize,  1));
+  halfFruits.push(new HalfFruit(x, y, emoji, imgSize, -1));
+  halfFruits.push(new HalfFruit(x, y, emoji, imgSize,  1));
 }
 function spawnExplosion(x, y) {
   const bc = {fill:'#FF6600', glow:'#ff2200'};
   for (let p = 0; p < 50; p++) particles.push(new Particle(x, y, bc));
 }
 
-// ─── Action Circle (DOM) ──────────────────────────────────────────────────────
+// ─── Action Circle (DOM <img>) ────────────────────────────────────────────────
 function createActionCircle(emoji, labelText, glowColor, onSlice) {
   actionLayer.innerHTML = '';
   actionCircleData = null;
@@ -387,20 +433,21 @@ function createActionCircle(emoji, labelText, glowColor, onSlice) {
   wrap.style.top  = (cy - r) + 'px';
   wrap.style.width = (r * 2) + 'px';
 
-  const emojiEl = document.createElement('div');
-  emojiEl.className = 'ac-emoji-el';
-  emojiEl.textContent = emoji;
-  emojiEl.style.fontSize = EMSIZE + 'px';
+  const emojiImg = document.createElement('img');
+  emojiImg.className = 'ac-img';
+  emojiImg.src = emojiToDataURL(emoji, EMSIZE * 2);
+  emojiImg.style.width  = EMSIZE + 'px';
+  emojiImg.style.height = EMSIZE + 'px';
 
   const labelEl = document.createElement('div');
   labelEl.className = 'ac-label-el';
   labelEl.textContent = labelText;
 
-  wrap.appendChild(emojiEl);
+  wrap.appendChild(emojiImg);
   wrap.appendChild(labelEl);
   actionLayer.appendChild(wrap);
 
-  actionCircleData = {wrap, emojiEl, x: cx, y: cy, r, glowColor, pulse: 0, wobble: 0, sliced: false, onSlice};
+  actionCircleData = {wrap, emojiImg, emoji, x: cx, y: cy, r, glowColor, pulse: 0, wobble: 0, sliced: false, onSlice};
 }
 
 function updateActionCircle() {
@@ -411,10 +458,10 @@ function updateActionCircle() {
   const scale = 1 + Math.sin(ac.pulse * 1.3) * 0.06;
   ac.wrap.style.transform = `translateY(${ac.wobble}px) scale(${scale})`;
   const g = 18 + Math.sin(ac.pulse) * 10;
-  ac.emojiEl.style.filter = `drop-shadow(0 0 ${g}px ${ac.glowColor})`;
+  ac.emojiImg.style.filter = `drop-shadow(0 0 ${g}px ${ac.glowColor})`;
 }
 
-// ─── HUD (canvas) ─────────────────────────────────────────────────────────────
+// ─── HUD ──────────────────────────────────────────────────────────────────────
 function roundRect(c, x, y, w, h, r) {
   c.beginPath(); c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.quadraticCurveTo(x+w,y,x+w,y+r);
   c.lineTo(x+w,y+h-r); c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
@@ -426,31 +473,31 @@ function drawHUD() {
   hudCtx.save();
   hudCtx.font = 'bold 52px Arial Black';
   const sw = hudCtx.measureText(String(score)).width;
-  const sW = sw+52, sH=76, sX=20, sY=16;
+  const sW=sw+52, sH=76, sX=20, sY=16;
   hudCtx.fillStyle = 'rgba(0,0,0,0.55)';
-  roundRect(hudCtx, sX, sY, sW, sH, 18); hudCtx.fill();
-  hudCtx.strokeStyle = 'rgba(255,255,255,0.18)'; hudCtx.lineWidth = 1.5;
-  roundRect(hudCtx, sX, sY, sW, sH, 18); hudCtx.stroke();
-  hudCtx.fillStyle = '#fff'; hudCtx.textAlign = 'left'; hudCtx.textBaseline = 'middle';
-  hudCtx.shadowColor = 'rgba(255,255,255,0.6)'; hudCtx.shadowBlur = 14;
-  hudCtx.fillText(String(score), sX+26, sY+sH/2);
-  hudCtx.shadowBlur = 0; hudCtx.font = '13px Arial'; hudCtx.fillStyle = 'rgba(255,255,255,0.55)';
-  hudCtx.fillText('SCORE', sX+26, sY+sH+10);
+  roundRect(hudCtx,sX,sY,sW,sH,18); hudCtx.fill();
+  hudCtx.strokeStyle='rgba(255,255,255,0.18)'; hudCtx.lineWidth=1.5;
+  roundRect(hudCtx,sX,sY,sW,sH,18); hudCtx.stroke();
+  hudCtx.fillStyle='#fff'; hudCtx.textAlign='left'; hudCtx.textBaseline='middle';
+  hudCtx.shadowColor='rgba(255,255,255,0.6)'; hudCtx.shadowBlur=14;
+  hudCtx.fillText(String(score),sX+26,sY+sH/2);
+  hudCtx.shadowBlur=0; hudCtx.font='13px Arial'; hudCtx.fillStyle='rgba(255,255,255,0.55)';
+  hudCtx.fillText('SCORE',sX+26,sY+sH+10);
   hudCtx.restore();
 }
 
 // ─── Ready screen ─────────────────────────────────────────────────────────────
 function drawReadyScreen() {
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.52)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 54px Arial Black'; ctx.fillStyle = '#fff';
-  ctx.shadowColor = 'rgba(255,255,255,0.5)'; ctx.shadowBlur = 25;
-  ctx.fillText('FRUIT NINJA AR', canvas.width/2, canvas.height*0.22);
-  ctx.shadowBlur = 0; ctx.font = '15px Arial'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('POINT YOUR INDEX FINGER  ·  SWIPE FAST TO SLICE', canvas.width/2, canvas.height*0.30);
-  ctx.font = '14px Arial'; ctx.fillStyle = 'rgba(255,120,120,0.9)';
-  ctx.fillText('AVOID THE BOMB — instant game over!', canvas.width/2, canvas.height*0.37);
+  ctx.fillStyle='rgba(0,0,0,0.52)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.textAlign='center';
+  ctx.font='bold 54px Arial Black'; ctx.fillStyle='#fff';
+  ctx.shadowColor='rgba(255,255,255,0.5)'; ctx.shadowBlur=25;
+  ctx.fillText('FRUIT NINJA AR',canvas.width/2,canvas.height*0.22);
+  ctx.shadowBlur=0; ctx.font='15px Arial'; ctx.fillStyle='rgba(255,255,255,0.55)';
+  ctx.fillText('POINT YOUR INDEX FINGER  ·  SWIPE FAST TO SLICE',canvas.width/2,canvas.height*0.30);
+  ctx.font='14px Arial'; ctx.fillStyle='rgba(255,120,120,0.9)';
+  ctx.fillText('AVOID THE BOMB — instant game over!',canvas.width/2,canvas.height*0.37);
   ctx.restore();
 }
 
@@ -483,7 +530,7 @@ function checkSlice() {
         ac.x, ac.y + ac.wobble, ac.r * 0.85
       )) {
         ac.sliced = true; lastSliceTime = Date.now();
-        spawnSliceEffect(ac.x, ac.y + ac.wobble, {fill:'#fff',glow:'#aff'}, ac.emojiEl.textContent, 100);
+        spawnSliceEffect(ac.x, ac.y + ac.wobble, {fill:'#fff',glow:'#aff'}, ac.emoji, 100);
         ac.wrap.style.transition = 'opacity 0.3s';
         ac.wrap.style.opacity = '0';
         setTimeout(ac.onSlice, 400);
@@ -509,7 +556,7 @@ function checkSlice() {
           setTimeout(triggerGameOver, 300);
         } else {
           score++;
-          spawnSliceEffect(f.x, f.y, f.color, f.emoji, f.fontSize);
+          spawnSliceEffect(f.x, f.y, f.color, f.emoji, f.imgSize);
           f.remove();
         }
         break;
@@ -538,7 +585,7 @@ function runGame() {
           if (!wasBomb) {
             lives--;
             updateHearts();
-            if (lives <= 0) { triggerGameOver(); }
+            if (lives <= 0) triggerGameOver();
           }
         }
       }
@@ -642,6 +689,8 @@ function initHandTracking() {
   });
 }
 
+// Init heart images BEFORE game starts
+initHeartImages();
 runGame();
 initHandTracking();
 </script>
