@@ -8,34 +8,163 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #000; overflow: hidden; font-family: 'Arial Black', sans-serif; user-select: none; }
   #container { position: relative; width: 100vw; height: 100vh; }
-  #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0; transition: opacity 0.5s; }
-  #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-  #loading { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.92); z-index: 30; transition: opacity 0.5s; }
+
+  #video {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover; transform: scaleX(-1);
+    opacity: 0; transition: opacity 0.5s;
+  }
+
+  /* Canvas: trail + particles only */
+  #canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 2; pointer-events: none;
+  }
+
+  /* All DOM fruit/half-fruit elements */
+  #fruit-layer {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 3; pointer-events: none;
+    overflow: hidden;
+  }
+
+  .fruit {
+    position: absolute;
+    line-height: 1;
+    transform-origin: center center;
+    pointer-events: none;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* Half fruit: clipped div showing top or bottom half of emoji */
+  .half-fruit {
+    position: absolute;
+    overflow: hidden;
+    pointer-events: none;
+    -webkit-user-select: none; user-select: none;
+  }
+  .half-fruit .hf-inner {
+    position: absolute;
+    line-height: 1;
+    transform-origin: center center;
+  }
+
+  /* HUD layer */
+  #hud-canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 6; pointer-events: none;
+  }
+
+  /* Heart lives - DOM so Safari renders emoji fine */
+  #lives-display {
+    position: absolute;
+    top: 16px; right: 20px;
+    z-index: 7;
+    display: flex; align-items: center; gap: 4px;
+    background: rgba(0,0,0,0.55);
+    border: 1.5px solid rgba(255,255,255,0.18);
+    border-radius: 18px;
+    padding: 8px 16px;
+    pointer-events: none;
+  }
+  .heart-icon {
+    font-size: 36px;
+    line-height: 1;
+    transition: opacity 0.3s;
+    -webkit-user-select: none; user-select: none;
+  }
+  .heart-icon.lost { opacity: 0.2; filter: grayscale(1); }
+
+  /* Loading */
+  #loading {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.92);
+    z-index: 30; transition: opacity 0.5s;
+  }
   #loading.hidden { opacity: 0; pointer-events: none; }
   .status-icon { font-size: 64px; margin-bottom: 20px; animation: pulse 1.5s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } }
-  .status-text { color: #fff; font-size: 22px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.8; }
-  .status-sub { color: rgba(255,255,255,0.4); font-size: 13px; letter-spacing: 2px; margin-top: 10px; text-transform: uppercase; }
-  #gameover-scrim { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 10; opacity: 0; pointer-events: none; transition: opacity 0.5s; }
+  @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.1);opacity:0.7} }
+  .status-text { color:#fff; font-size:22px; letter-spacing:3px; text-transform:uppercase; opacity:0.8; }
+  .status-sub { color:rgba(255,255,255,0.4); font-size:13px; letter-spacing:2px; margin-top:10px; text-transform:uppercase; }
+
+  /* Game over */
+  #gameover-scrim {
+    position: absolute; top:0; left:0; width:100%; height:100%;
+    background: rgba(0,0,0,0.75); z-index: 10;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s;
+  }
   #gameover-scrim.show { opacity: 1; }
-  #gameover-text { position: absolute; top: 0; left: 0; width: 100%; height: 42%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 15; opacity: 0; pointer-events: none; transition: opacity 0.5s; }
-  #gameover-text.show { opacity: 1; }
-  #gameover-text h1 { color: #ff3333; font-size: 72px; text-shadow: 0 0 30px rgba(255,50,50,0.8), 0 0 60px rgba(255,50,50,0.4); letter-spacing: 4px; margin-bottom: 16px; animation: glitch 0.3s ease-in-out infinite alternate; }
-  @keyframes glitch { 0% { text-shadow: 0 0 30px rgba(255,50,50,0.8), -2px 0 rgba(0,255,255,0.5); } 100% { text-shadow: 0 0 30px rgba(255,50,50,0.8), 2px 0 rgba(255,0,255,0.5); } }
-  #final-score { color: #fff; font-size: 32px; letter-spacing: 2px; }
-  #action-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
+  #gameover-text {
+    position: absolute; top:0; left:0; width:100%; height:42%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:15; opacity:0; pointer-events:none; transition: opacity 0.5s;
+  }
+  #gameover-text.show { opacity:1; }
+  #gameover-text h1 {
+    color:#ff3333; font-size:72px;
+    text-shadow:0 0 30px rgba(255,50,50,0.8),0 0 60px rgba(255,50,50,0.4);
+    letter-spacing:4px; margin-bottom:16px;
+    animation: glitch 0.3s ease-in-out infinite alternate;
+  }
+  @keyframes glitch {
+    0%{text-shadow:0 0 30px rgba(255,50,50,0.8),-2px 0 rgba(0,255,255,0.5)}
+    100%{text-shadow:0 0 30px rgba(255,50,50,0.8),2px 0 rgba(255,0,255,0.5)}
+  }
+  #final-score { color:#fff; font-size:32px; letter-spacing:2px; }
+
+  /* Action circle */
+  #action-layer {
+    position: absolute; top:0; left:0; width:100%; height:100%;
+    z-index: 20; pointer-events: none;
+  }
+  .action-circle {
+    position: absolute;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 50%;
+    pointer-events: none;
+    -webkit-user-select: none; user-select: none;
+  }
+  .action-circle .ac-emoji { font-size: 120px; line-height: 1; }
+  .action-circle .ac-label {
+    color: #fff; font-family: 'Arial Black', sans-serif;
+    font-size: 17px; font-weight: bold;
+    text-align: center; margin-top: 8px;
+    text-shadow: 0 0 8px rgba(0,0,0,1), 0 0 16px rgba(0,0,0,1);
+    white-space: pre-line; line-height: 1.4;
+  }
 </style>
 </head>
 <body>
 <div id="container">
   <video id="video" autoplay playsinline muted></video>
+
   <canvas id="canvas"></canvas>
+  <div id="fruit-layer"></div>
+  <canvas id="hud-canvas"></canvas>
+
+  <!-- Heart lives as DOM elements -->
+  <div id="lives-display">
+    <span class="heart-icon" id="heart-0">❤️</span>
+    <span class="heart-icon" id="heart-1">❤️</span>
+    <span class="heart-icon" id="heart-2">❤️</span>
+  </div>
+
   <div id="gameover-scrim"></div>
   <div id="gameover-text">
     <h1>GAME OVER</h1>
     <div id="final-score">Score: 0</div>
   </div>
-  <canvas id="action-canvas"></canvas>
+
+  <div id="action-layer"></div>
+
   <div id="loading">
     <div class="status-icon" id="status-icon">📷</div>
     <div class="status-text" id="status-text">Starting Camera</div>
@@ -48,399 +177,436 @@
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const actionCanvas = document.getElementById('action-canvas');
-const actx = actionCanvas.getContext('2d');
-const video = document.getElementById('video');
+const canvas    = document.getElementById('canvas');
+const ctx       = canvas.getContext('2d');
+const hudCanvas = document.getElementById('hud-canvas');
+const hudCtx    = hudCanvas.getContext('2d');
+const video     = document.getElementById('video');
+const fruitLayer= document.getElementById('fruit-layer');
+const actionLayer=document.getElementById('action-layer');
 
 function resize() {
-  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-  actionCanvas.width = window.innerWidth; actionCanvas.height = window.innerHeight;
+  canvas.width = window.innerWidth;    canvas.height = window.innerHeight;
+  hudCanvas.width=window.innerWidth;   hudCanvas.height=window.innerHeight;
 }
 resize();
 window.addEventListener('resize', resize);
 
-// ─── Emoji cache ──────────────────────────────────────────────────────────────
-// Safari cannot render emoji via ctx.fillText() on a visible canvas.
-// Fix: draw emoji onto a hidden offscreen canvas once, then use drawImage().
-const emojiCache = {};
-function getEmojiCanvas(emoji, size) {
-  const key = emoji + '_' + size;
-  if (emojiCache[key]) return emojiCache[key];
-  const oc = document.createElement('canvas');
-  oc.width = size; oc.height = size;
-  const oc2d = oc.getContext('2d');
-  oc2d.font = Math.floor(size * 0.8) + 'px serif';
-  oc2d.textAlign = 'center';
-  oc2d.textBaseline = 'middle';
-  oc2d.fillText(emoji, size / 2, size / 2);
-  emojiCache[key] = oc;
-  return oc;
-}
-function drawEmoji(c, emoji, x, y, radius, rotation) {
-  const size = Math.ceil(radius * 2) * 2; // 2x for sharpness
-  const img = getEmojiCanvas(emoji, size);
-  c.save();
-  c.translate(x, y);
-  if (rotation) c.rotate(rotation);
-  c.drawImage(img, -radius, -radius, radius * 2, radius * 2);
-  c.restore();
-}
-
-let score = 0, lives = 3, gameActive = false, gameOverFlag = false, readyToStart = false;
-let fruits = [], particles = [], halfFruits = [], slashTrail = [];
-let lastSliceTime = 0, frameCount = 0;
-let startCircle = null, restartCircle = null;
-
-const FRUIT_EMOJIS = ['🍎','🍊','🍋','🍇','🍓','🍉','🍌','🍑','🥭','🍍','🥝','🍒','🫐','🍈','🍐','🥥'];
-const BOMB_EMOJI = '💣';
-const FRUIT_COLORS = [
-  { fill: '#FF4D6D', glow: '#ff0033' },
-  { fill: '#FFD60A', glow: '#ffaa00' },
-  { fill: '#06D6A0', glow: '#00ff99' },
-  { fill: '#4CC9F0', glow: '#00ccff' },
-  { fill: '#F72585', glow: '#ff0099' },
-  { fill: '#FB5607', glow: '#ff6600' },
+const FRUIT_EMOJIS=['🍎','🍊','🍋','🍇','🍓','🍉','🍌','🍑','🥭','🍍','🥝','🍒','🫐','🍈','🍐','🥥'];
+const BOMB_EMOJI='💣';
+const FRUIT_COLORS=[
+  {fill:'#FF4D6D',glow:'#ff0033'},{fill:'#FFD60A',glow:'#ffaa00'},
+  {fill:'#06D6A0',glow:'#00ff99'},{fill:'#4CC9F0',glow:'#00ccff'},
+  {fill:'#F72585',glow:'#ff0099'},{fill:'#FB5607',glow:'#ff6600'},
 ];
 
-// ─── ActionCircle ─────────────────────────────────────────────────────────────
-class ActionCircle {
-  constructor(label, emoji, color) {
-    this.r = 110;
-    this.x = canvas.width / 2;
-    this.y = canvas.height * 0.68;
-    this.color = color; this.label = label; this.emoji = emoji;
-    this.sliced = false; this.pulse = 0; this.wobble = 0;
+let score=0,lives=3,gameActive=false,gameOverFlag=false,readyToStart=false;
+let fruits=[],particles=[],halfFruits=[],slashTrail=[];
+let lastSliceTime=0,frameCount=0;
+let actionCircleData=null;
+
+// ─── Update heart display ─────────────────────────────────────────────────────
+function updateHearts() {
+  for (let i=0;i<3;i++) {
+    const h = document.getElementById('heart-'+i);
+    if (i < lives) { h.classList.remove('lost'); }
+    else           { h.classList.add('lost'); }
   }
-  update() { this.pulse += 0.05; this.wobble = Math.sin(this.pulse) * 6; }
-  draw(c) {
-    if (this.sliced) return;
-    const cy = this.y + this.wobble;
-    const r = this.r + Math.sin(this.pulse * 1.3) * 5;
-    // glow ring
-    c.save();
-    c.beginPath(); c.arc(this.x, cy, r + 18, 0, Math.PI * 2);
-    c.strokeStyle = this.color.glow; c.lineWidth = 4;
-    c.globalAlpha = 0.4 + Math.sin(this.pulse) * 0.2;
-    c.shadowColor = this.color.glow; c.shadowBlur = 40; c.stroke();
-    c.globalAlpha = 1; c.shadowBlur = 0;
-    c.restore();
-    // emoji
-    drawEmoji(c, this.emoji, this.x, cy, r, 0);
-    // label
-    c.save();
-    c.font = 'bold 17px Arial Black'; c.fillStyle = '#fff';
-    c.textAlign = 'center'; c.textBaseline = 'top';
-    c.shadowColor = 'rgba(0,0,0,1)'; c.shadowBlur = 10;
-    const lines = this.label.split('\n');
-    lines.forEach((line, i) => { c.fillText(line, this.x, cy + r + 18 + i * 22); });
-    c.restore();
-  }
-  hitTest(px, py) {
-    const dx = px - this.x, dy = py - (this.y + this.wobble);
-    return Math.sqrt(dx*dx + dy*dy) < this.r + 16;
-  }
+  document.getElementById('lives-display').style.display = gameActive ? 'flex' : 'none';
 }
 
-// ─── Fruit ────────────────────────────────────────────────────────────────────
+// ─── Fruit (DOM div) ──────────────────────────────────────────────────────────
 class Fruit {
   constructor(isBomb) {
-    this.r = 62 + Math.random() * 22;
-    this.x = this.r + Math.random() * (canvas.width - this.r * 2);
-    this.y = canvas.height + this.r;
-    this.isBomb = isBomb || false;
-    this.emoji = this.isBomb ? BOMB_EMOJI : FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
-    this.color = this.isBomb ? { fill: '#333', glow: '#ff4400' } : FRUIT_COLORS[Math.floor(Math.random() * FRUIT_COLORS.length)];
-    this.sliced = false;
-    this.rotation = Math.random() * Math.PI * 2;
-    this.rotSpeed = (Math.random() - 0.5) * 0.07;
-    const tier = Math.random();
-    let speed = tier < 0.25 ? 21 + Math.random() * 4 : tier < 0.65 ? 15 + Math.random() * 4 : 10 + Math.random() * 3;
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.65;
-    this.vx = Math.cos(angle) * speed * 0.35; this.vy = Math.sin(angle) * speed; this.gravity = 0.22;
+    this.isBomb  = isBomb||false;
+    this.emoji   = this.isBomb ? BOMB_EMOJI : FRUIT_EMOJIS[Math.floor(Math.random()*FRUIT_EMOJIS.length)];
+    this.color   = this.isBomb ? {fill:'#444',glow:'#ff4400'} : FRUIT_COLORS[Math.floor(Math.random()*FRUIT_COLORS.length)];
+    this.r       = 46 + Math.random()*18;
+    this.fontSize= this.r * 2;
+    this.x       = this.r + Math.random()*(window.innerWidth - this.r*2);
+    this.y       = window.innerHeight + this.r;
+    this.sliced  = false;
+    this.rotation= Math.random()*360;
+    this.rotSpeed= (Math.random()-0.5)*4;
+    const tier   = Math.random();
+    const speed  = tier<0.25 ? 21+Math.random()*4 : tier<0.65 ? 15+Math.random()*4 : 10+Math.random()*3;
+    const angle  = -Math.PI/2 + (Math.random()-0.5)*0.65;
+    this.vx = Math.cos(angle)*speed*0.35;
+    this.vy = Math.sin(angle)*speed;
+    this.gravity = 0.22;
+
+    this.el = document.createElement('div');
+    this.el.className = 'fruit';
+    this.el.textContent = this.emoji;
+    this.el.style.fontSize = this.fontSize + 'px';
+    fruitLayer.appendChild(this.el);
+    this._sync();
   }
-  update() { this.vy += this.gravity; this.x += this.vx; this.y += this.vy; this.rotation += this.rotSpeed; }
-  isOffScreen() { return this.y > canvas.height + this.r + 10; }
-  draw() {
-    drawEmoji(ctx, this.emoji, this.x, this.y, this.r, this.rotation);
+  _sync() {
+    const off = this.fontSize * 0.55;
+    this.el.style.left      = (this.x - off) + 'px';
+    this.el.style.top       = (this.y - off) + 'px';
+    this.el.style.transform = `rotate(${this.rotation}deg)`;
+    if (this.isBomb) this.el.style.filter = 'drop-shadow(0 0 8px #ff4400)';
   }
+  update() {
+    this.vy += this.gravity; this.x += this.vx; this.y += this.vy;
+    this.rotation += this.rotSpeed;
+    this._sync();
+  }
+  isOffScreen() { return this.y > window.innerHeight + this.r + 40; }
+  remove() { if (this.el&&this.el.parentNode) this.el.parentNode.removeChild(this.el); }
 }
 
-// ─── Particle ─────────────────────────────────────────────────────────────────
-class Particle {
-  constructor(x, y, color) {
-    this.x = x; this.y = y; this.color = color;
-    const angle = Math.random() * Math.PI * 2, speed = 4 + Math.random() * 8;
-    this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
-    this.life = 1; this.decay = 0.025 + Math.random() * 0.02; this.r = 5 + Math.random() * 10;
-  }
-  update() { this.x += this.vx; this.y += this.vy; this.vy += 0.15; this.life -= this.decay; }
-  draw() {
-    if (this.life <= 0) return;
-    ctx.save(); ctx.globalAlpha = this.life;
-    ctx.shadowColor = this.color.glow; ctx.shadowBlur = 12;
-    ctx.beginPath(); ctx.arc(this.x, this.y, Math.max(0.1, this.r * this.life), 0, Math.PI * 2);
-    ctx.fillStyle = this.color.fill; ctx.fill(); ctx.restore();
-  }
-}
-
-// ─── HalfFruit ────────────────────────────────────────────────────────────────
+// ─── Half Fruit (DOM div, clipped to show top half = sliced look) ─────────────
 class HalfFruit {
-  constructor(x, y, emoji, dir, isBomb) {
-    this.x = x; this.y = y; this.emoji = emoji; this.isBomb = isBomb;
-    this.vx = dir * (4 + Math.random() * 4); this.vy = -5 - Math.random() * 4;
-    this.gravity = 0.3; this.r = 55; this.life = 1; this.decay = 0.02;
-    this.rotation = 0; this.rotSpeed = dir * 0.09;
+  constructor(x, y, emoji, fontSize, dir) {
+    this.emoji    = emoji;
+    this.fontSize = fontSize;
+    this.x = x; this.y = y;
+    this.vx = dir*(4+Math.random()*5);
+    this.vy = -6-Math.random()*5;
+    this.gravity  = 0.32;
+    this.life     = 1;
+    this.decay    = 0.018;
+    this.rotation = dir * (10 + Math.random()*20); // start angled
+    this.rotSpeed = dir*(2+Math.random()*3);
+
+    // clip container: only top half visible
+    const clipH = fontSize * 0.6; // half the visual height
+    this.el = document.createElement('div');
+    this.el.className = 'half-fruit';
+    this.el.style.width  = (fontSize * 1.2) + 'px';
+    this.el.style.height = clipH + 'px';
+    this.el.style.overflow = 'hidden';
+
+    // inner: the full emoji, positioned so top half shows
+    this.inner = document.createElement('div');
+    this.inner.className = 'hf-inner';
+    this.inner.textContent = emoji;
+    this.inner.style.fontSize  = fontSize + 'px';
+    this.inner.style.left = '0px';
+    this.inner.style.top  = '0px';
+    this.inner.style.opacity = '0.92';
+
+    this.el.appendChild(this.inner);
+    fruitLayer.appendChild(this.el);
+    this._sync();
   }
-  update() { this.vy += this.gravity; this.x += this.vx; this.y += this.vy; this.rotation += this.rotSpeed; this.life -= this.decay; }
-  draw() {
-    if (this.life <= 0) return;
+  _sync() {
+    const w = this.fontSize * 1.2;
+    const h = this.fontSize * 0.6;
+    this.el.style.left      = (this.x - w/2) + 'px';
+    this.el.style.top       = (this.y - h/2) + 'px';
+    this.el.style.opacity   = this.life;
+    this.el.style.transform = `rotate(${this.rotation}deg)`;
+  }
+  update() {
+    this.vy += this.gravity; this.x += this.vx; this.y += this.vy;
+    this.rotation += this.rotSpeed;
+    this.life -= this.decay;
+    this._sync();
+  }
+  remove() { if (this.el&&this.el.parentNode) this.el.parentNode.removeChild(this.el); }
+}
+
+// ─── Particle (canvas) ────────────────────────────────────────────────────────
+class Particle {
+  constructor(x,y,color) {
+    this.x=x;this.y=y;this.color=color;
+    const a=Math.random()*Math.PI*2,s=4+Math.random()*8;
+    this.vx=Math.cos(a)*s;this.vy=Math.sin(a)*s;
+    this.life=1;this.decay=0.025+Math.random()*0.02;this.r=5+Math.random()*10;
+  }
+  update(){this.x+=this.vx;this.y+=this.vy;this.vy+=0.15;this.life-=this.decay;}
+  draw(){
+    if(this.life<=0)return;
+    ctx.save();ctx.globalAlpha=this.life;
+    ctx.shadowColor=this.color.glow;ctx.shadowBlur=12;
+    ctx.beginPath();ctx.arc(this.x,this.y,Math.max(0.1,this.r*this.life),0,Math.PI*2);
+    ctx.fillStyle=this.color.fill;ctx.fill();ctx.restore();
+  }
+}
+
+// ─── Trail (canvas) ───────────────────────────────────────────────────────────
+const TRAIL_LENGTH=18;
+function addTrailPoint(x,y){slashTrail.push({x,y,t:Date.now()});if(slashTrail.length>TRAIL_LENGTH)slashTrail.shift();}
+function drawTrail(){
+  if(slashTrail.length<2)return;
+  const now=Date.now();
+  for(let i=1;i<slashTrail.length;i++){
+    const p=slashTrail[i-1],c=slashTrail[i];
+    const age=(now-c.t)/120,alpha=Math.max(0,1-age);
+    const w=(i/slashTrail.length)*16+2;
     ctx.save();
-    ctx.globalAlpha = this.life;
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.rotation);
-    // clip to top half for sliced look
-    ctx.beginPath();
-    ctx.rect(-this.r * 1.5, -this.r * 1.5, this.r * 3, this.r * 1.5);
-    ctx.clip();
-    ctx.rotate(-this.rotation);
-    ctx.translate(-this.x, -this.y);
-    drawEmoji(ctx, this.emoji, this.x, this.y, this.r, this.rotation);
+    ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(c.x,c.y);
+    ctx.strokeStyle=`rgba(255,255,255,${alpha*0.9})`;ctx.lineWidth=w;ctx.lineCap='round';
+    ctx.shadowColor='rgba(200,220,255,0.9)';ctx.shadowBlur=22;ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(c.x,c.y);
+    ctx.strokeStyle=`rgba(255,255,255,${alpha})`;ctx.lineWidth=w*0.3;ctx.shadowBlur=5;ctx.stroke();
     ctx.restore();
   }
 }
-
-// ─── Trail ────────────────────────────────────────────────────────────────────
-const TRAIL_LENGTH = 18;
-function addTrailPoint(x, y) { slashTrail.push({ x, y, t: Date.now() }); if (slashTrail.length > TRAIL_LENGTH) slashTrail.shift(); }
-function drawTrail() {
-  if (slashTrail.length < 2) return;
-  const now = Date.now();
-  for (let i = 1; i < slashTrail.length; i++) {
-    const prev = slashTrail[i-1], curr = slashTrail[i];
-    const age = (now - curr.t) / 120, alpha = Math.max(0, 1 - age);
-    const width = (i / slashTrail.length) * 16 + 2;
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(curr.x, curr.y);
-    ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.9})`; ctx.lineWidth = width; ctx.lineCap = 'round';
-    ctx.shadowColor = 'rgba(200,220,255,0.9)'; ctx.shadowBlur = 22; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(curr.x, curr.y);
-    ctx.strokeStyle = `rgba(255,255,255,${alpha})`; ctx.lineWidth = width * 0.3; ctx.shadowBlur = 5; ctx.stroke();
-    ctx.restore();
-  }
+function getTrailVelocity(){
+  if(slashTrail.length<3)return 0;
+  const a=slashTrail[0],b=slashTrail[slashTrail.length-1];
+  const dx=b.x-a.x,dy=b.y-a.y,dt=(b.t-a.t)/1000||0.001;
+  return Math.sqrt(dx*dx+dy*dy)/dt;
 }
-function getTrailVelocity() {
-  if (slashTrail.length < 3) return 0;
-  const a = slashTrail[0], b = slashTrail[slashTrail.length - 1];
-  const dx = b.x - a.x, dy = b.y - a.y, dt = (b.t - a.t) / 1000 || 0.001;
-  return Math.sqrt(dx*dx + dy*dy) / dt;
-}
-function lineCircleIntersect(x1, y1, x2, y2, cx, cy, r) {
-  const dx = x2-x1, dy = y2-y1, fx = x1-cx, fy = y1-cy;
-  const a = dx*dx+dy*dy, b = 2*(fx*dx+fy*dy), c = fx*fx+fy*fy-r*r;
-  let disc = b*b-4*a*c;
-  if (disc < 0) return false;
-  disc = Math.sqrt(disc);
-  const t1 = (-b-disc)/(2*a), t2 = (-b+disc)/(2*a);
-  return (t1>=0&&t1<=1)||(t2>=0&&t2<=1);
-}
-function spawnSliceEffect(x, y, color, emoji, isBomb) {
-  for (let p = 0; p < 18; p++) particles.push(new Particle(x, y, color));
-  halfFruits.push(new HalfFruit(x, y, emoji, -1, isBomb));
-  halfFruits.push(new HalfFruit(x, y, emoji, 1, isBomb));
-}
-function spawnExplosion(x, y) {
-  const bc = { fill: '#FF6600', glow: '#ff2200' };
-  for (let p = 0; p < 50; p++) particles.push(new Particle(x, y, bc));
-  halfFruits.push(new HalfFruit(x, y, BOMB_EMOJI, -1, true));
-  halfFruits.push(new HalfFruit(x, y, BOMB_EMOJI, 1, true));
+function lineCircleIntersect(x1,y1,x2,y2,cx,cy,r){
+  const dx=x2-x1,dy=y2-y1,fx=x1-cx,fy=y1-cy;
+  const a=dx*dx+dy*dy,b=2*(fx*dx+fy*dy),c=fx*fx+fy*fy-r*r;
+  let d=b*b-4*a*c;if(d<0)return false;d=Math.sqrt(d);
+  const t1=(-b-d)/(2*a),t2=(-b+d)/(2*a);
+  return(t1>=0&&t1<=1)||(t2>=0&&t2<=1);
 }
 
-// ─── Slice Detection ──────────────────────────────────────────────────────────
-function checkSlice() {
-  const velocity = getTrailVelocity();
-  if (velocity < 200) return;
-  if (Date.now() - lastSliceTime < 50) return;
-
-  if (readyToStart && startCircle && !startCircle.sliced) {
-    for (let j = 1; j < slashTrail.length; j++) {
-      if (lineCircleIntersect(slashTrail[j-1].x, slashTrail[j-1].y, slashTrail[j].x, slashTrail[j].y,
-          startCircle.x, startCircle.y + startCircle.wobble, startCircle.r)) {
-        startCircle.sliced = true; lastSliceTime = Date.now();
-        spawnSliceEffect(startCircle.x, startCircle.y + startCircle.wobble, startCircle.color, startCircle.emoji);
-        setTimeout(startGame, 500); return;
-      }
-    }
-  }
-  if (gameOverFlag && restartCircle && !restartCircle.sliced) {
-    for (let j = 1; j < slashTrail.length; j++) {
-      if (lineCircleIntersect(slashTrail[j-1].x, slashTrail[j-1].y, slashTrail[j].x, slashTrail[j].y,
-          restartCircle.x, restartCircle.y + restartCircle.wobble, restartCircle.r)) {
-        restartCircle.sliced = true; lastSliceTime = Date.now();
-        spawnSliceEffect(restartCircle.x, restartCircle.y + restartCircle.wobble, restartCircle.color, restartCircle.emoji);
-        setTimeout(startGame, 500); return;
-      }
-    }
-  }
-  if (!gameActive) return;
-  for (let i = 0; i < fruits.length; i++) {
-    const f = fruits[i]; if (f.sliced) continue;
-    for (let j = 1; j < slashTrail.length; j++) {
-      if (lineCircleIntersect(slashTrail[j-1].x, slashTrail[j-1].y, slashTrail[j].x, slashTrail[j].y, f.x, f.y, f.r)) {
-        f.sliced = true; lastSliceTime = Date.now();
-        if (f.isBomb) { spawnExplosion(f.x, f.y); setTimeout(triggerGameOver, 300); }
-        else { score++; spawnSliceEffect(f.x, f.y, f.color, f.emoji); }
-        break;
-      }
-    }
-  }
-  fruits = fruits.filter(f => !f.sliced);
+// ─── Slice effects ────────────────────────────────────────────────────────────
+function spawnSliceEffect(x, y, color, emoji, fontSize) {
+  for(let p=0;p<20;p++) particles.push(new Particle(x,y,color));
+  // Two halves flying apart
+  halfFruits.push(new HalfFruit(x, y, emoji, fontSize, -1));
+  halfFruits.push(new HalfFruit(x, y, emoji, fontSize,  1));
+}
+function spawnExplosion(x,y){
+  const bc={fill:'#FF6600',glow:'#ff2200'};
+  for(let p=0;p<50;p++) particles.push(new Particle(x,y,bc));
 }
 
-// ─── HUD ──────────────────────────────────────────────────────────────────────
-function roundRect(c, x, y, w, h, r) {
-  c.beginPath(); c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.quadraticCurveTo(x+w,y,x+w,y+r);
-  c.lineTo(x+w,y+h-r); c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  c.lineTo(x+r,y+h); c.quadraticCurveTo(x,y+h,x,y+h-r);
-  c.lineTo(x,y+r); c.quadraticCurveTo(x,y,x+r,y); c.closePath();
+// ─── Action Circle (DOM) ──────────────────────────────────────────────────────
+function createActionCircle(emoji, labelText, glowColor, onSlice) {
+  actionLayer.innerHTML='';
+  actionCircleData=null;
+  const SIZE=220, R=SIZE/2;
+  const cx=window.innerWidth/2, cy=window.innerHeight*0.68;
+  const el=document.createElement('div');
+  el.className='action-circle';
+  el.style.width=SIZE+'px'; el.style.height=SIZE+'px';
+  el.style.left=(cx-R)+'px'; el.style.top=(cy-R)+'px';
+  const emojiEl=document.createElement('div');
+  emojiEl.className='ac-emoji'; emojiEl.textContent=emoji;
+  const labelEl=document.createElement('div');
+  labelEl.className='ac-label'; labelEl.textContent=labelText;
+  el.appendChild(emojiEl); el.appendChild(labelEl);
+  actionLayer.appendChild(el);
+  actionCircleData={el,emojiEl,x:cx,y:cy,r:R,glowColor,pulse:0,wobble:0,sliced:false,onSlice};
 }
-function drawHUD() {
-  ctx.save();
-  // Score box
-  ctx.font = 'bold 52px Arial Black';
-  const sw = ctx.measureText(String(score)).width;
-  const sW = sw + 52, sH = 76, sX = 20, sY = 16;
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  roundRect(ctx, sX, sY, sW, sH, 18); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1.5;
-  roundRect(ctx, sX, sY, sW, sH, 18); ctx.stroke();
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 14;
-  ctx.fillText(String(score), sX + 26, sY + sH / 2);
-  ctx.shadowBlur = 0; ctx.font = '13px Arial'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('SCORE', sX + 26, sY + sH + 10);
+function updateActionCircle(){
+  if(!actionCircleData||actionCircleData.sliced)return;
+  const ac=actionCircleData;
+  ac.pulse+=0.05; ac.wobble=Math.sin(ac.pulse)*6;
+  const scale=1+Math.sin(ac.pulse*1.3)*0.05;
+  ac.el.style.transform=`translateY(${ac.wobble}px) scale(${scale})`;
+  const g=20+Math.sin(ac.pulse)*10;
+  ac.emojiEl.style.filter=`drop-shadow(0 0 ${g}px ${ac.glowColor})`;
+}
 
-  // Lives box — draw hearts via drawImage (Safari-safe)
-  const heartR = 18;
-  const heartSpacing = heartR * 2 + 8;
-  const hW = 3 * heartSpacing + 20, hH = 68, hX = canvas.width - hW - 20, hY = 16;
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  roundRect(ctx, hX, hY, hW, hH, 18); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1.5;
-  roundRect(ctx, hX, hY, hW, hH, 18); ctx.stroke();
-  for (let i = 0; i < 3; i++) {
-    const emoji = i < lives ? '❤️' : '🖤';
-    const ex = hX + 10 + heartR + i * heartSpacing;
-    const ey = hY + hH / 2;
-    ctx.globalAlpha = i < lives ? 1.0 : 0.35;
-    drawEmoji(ctx, emoji, ex, ey, heartR, 0);
-  }
-  ctx.globalAlpha = 1.0;
-  ctx.restore();
+// ─── HUD score (canvas) ───────────────────────────────────────────────────────
+function roundRect(c,x,y,w,h,r){
+  c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);
+  c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);
+  c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();
+}
+function drawHUD(){
+  hudCtx.clearRect(0,0,hudCanvas.width,hudCanvas.height);
+  hudCtx.save();
+  hudCtx.font='bold 52px Arial Black';
+  const sw=hudCtx.measureText(String(score)).width;
+  const sW=sw+52,sH=76,sX=20,sY=16;
+  hudCtx.fillStyle='rgba(0,0,0,0.55)';
+  roundRect(hudCtx,sX,sY,sW,sH,18);hudCtx.fill();
+  hudCtx.strokeStyle='rgba(255,255,255,0.18)';hudCtx.lineWidth=1.5;
+  roundRect(hudCtx,sX,sY,sW,sH,18);hudCtx.stroke();
+  hudCtx.fillStyle='#fff';hudCtx.textAlign='left';hudCtx.textBaseline='middle';
+  hudCtx.shadowColor='rgba(255,255,255,0.6)';hudCtx.shadowBlur=14;
+  hudCtx.fillText(String(score),sX+26,sY+sH/2);
+  hudCtx.shadowBlur=0;hudCtx.font='13px Arial';hudCtx.fillStyle='rgba(255,255,255,0.55)';
+  hudCtx.fillText('SCORE',sX+26,sY+sH+10);
+  hudCtx.restore();
 }
 
 // ─── Ready Screen ─────────────────────────────────────────────────────────────
-function drawReadyScreen() {
+function drawReadyScreen(){
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.52)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 54px Arial Black'; ctx.fillStyle = '#fff';
-  ctx.shadowColor = 'rgba(255,255,255,0.5)'; ctx.shadowBlur = 25;
-  ctx.fillText('FRUIT NINJA AR', canvas.width/2, canvas.height * 0.24);
-  ctx.shadowBlur = 0; ctx.font = '15px Arial'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('POINT YOUR INDEX FINGER  ·  SWIPE FAST TO SLICE', canvas.width/2, canvas.height * 0.33);
-  ctx.font = '14px Arial'; ctx.fillStyle = 'rgba(255,120,120,0.9)';
-  ctx.fillText('AVOID THE BOMB — instant game over!', canvas.width/2, canvas.height * 0.40);
+  ctx.fillStyle='rgba(0,0,0,0.52)';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.textAlign='center';
+  ctx.font='bold 54px Arial Black';ctx.fillStyle='#fff';
+  ctx.shadowColor='rgba(255,255,255,0.5)';ctx.shadowBlur=25;
+  ctx.fillText('FRUIT NINJA AR',canvas.width/2,canvas.height*0.24);
+  ctx.shadowBlur=0;ctx.font='15px Arial';ctx.fillStyle='rgba(255,255,255,0.55)';
+  ctx.fillText('POINT YOUR INDEX FINGER  ·  SWIPE FAST TO SLICE',canvas.width/2,canvas.height*0.33);
+  ctx.font='14px Arial';ctx.fillStyle='rgba(255,120,120,0.9)';
+  ctx.fillText('AVOID THE BOMB — instant game over!',canvas.width/2,canvas.height*0.40);
   ctx.restore();
 }
 
 // ─── Spawn ────────────────────────────────────────────────────────────────────
-function maybeSpawn() {
-  if (!gameActive) return;
+function maybeSpawn(){
+  if(!gameActive)return;
   frameCount++;
-  const interval = Math.max(45, 90 - Math.floor(score / 5) * 3);
-  if (frameCount % interval === 0) {
-    const count = Math.random() < 0.25 ? 2 : 1;
-    for (let i = 0; i < count; i++) {
-      const isBomb = Math.random() < (0.12 + Math.min(score * 0.003, 0.15));
+  const interval=Math.max(45,90-Math.floor(score/5)*3);
+  if(frameCount%interval===0){
+    const count=Math.random()<0.25?2:1;
+    for(let i=0;i<count;i++){
+      const isBomb=Math.random()<(0.12+Math.min(score*0.003,0.15));
       fruits.push(new Fruit(isBomb));
     }
   }
 }
 
+// ─── Slice Detection ──────────────────────────────────────────────────────────
+function checkSlice(){
+  const velocity=getTrailVelocity();
+  if(velocity<200)return;
+  if(Date.now()-lastSliceTime<50)return;
+
+  if(actionCircleData&&!actionCircleData.sliced){
+    const ac=actionCircleData;
+    for(let j=1;j<slashTrail.length;j++){
+      if(lineCircleIntersect(
+        slashTrail[j-1].x,slashTrail[j-1].y,
+        slashTrail[j].x,slashTrail[j].y,
+        ac.x,ac.y+ac.wobble,ac.r*0.8
+      )){
+        ac.sliced=true; lastSliceTime=Date.now();
+        spawnSliceEffect(ac.x,ac.y+ac.wobble,{fill:'#fff',glow:'#fff'},ac.emojiEl.textContent,100);
+        ac.el.style.transition='opacity 0.3s';ac.el.style.opacity='0';
+        setTimeout(ac.onSlice,400); return;
+      }
+    }
+  }
+
+  if(!gameActive)return;
+
+  for(let i=0;i<fruits.length;i++){
+    const f=fruits[i];if(f.sliced)continue;
+    for(let j=1;j<slashTrail.length;j++){
+      if(lineCircleIntersect(
+        slashTrail[j-1].x,slashTrail[j-1].y,
+        slashTrail[j].x,slashTrail[j].y,
+        f.x,f.y,f.r
+      )){
+        f.sliced=true; lastSliceTime=Date.now();
+        if(f.isBomb){
+          spawnExplosion(f.x,f.y);
+          f.remove();
+          setTimeout(triggerGameOver,300);
+        } else {
+          score++;
+          spawnSliceEffect(f.x,f.y,f.color,f.emoji,f.fontSize);
+          f.remove();
+        }
+        break;
+      }
+    }
+  }
+  fruits=fruits.filter(f=>!f.sliced);
+}
+
 // ─── Game Loop ────────────────────────────────────────────────────────────────
-function gameLoop() {
-  try {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    actx.clearRect(0, 0, actionCanvas.width, actionCanvas.height);
+function gameLoop(){
+  try{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    if (readyToStart && !gameActive && !gameOverFlag) drawReadyScreen();
+    if(readyToStart&&!gameActive&&!gameOverFlag) drawReadyScreen();
 
-    if (gameActive) {
+    if(gameActive){
       maybeSpawn();
-      for (let i = fruits.length - 1; i >= 0; i--) {
-        fruits[i].update(); fruits[i].draw();
-        if (fruits[i].isOffScreen()) {
-          if (!fruits[i].isBomb) { lives--; if (lives <= 0) triggerGameOver(); }
-          fruits.splice(i, 1);
+      for(let i=fruits.length-1;i>=0;i--){
+        fruits[i].update();
+        if(fruits[i].isOffScreen()){
+          fruits[i].remove(); fruits.splice(i,1);
+          if(!fruits[i]?.isBomb){ // fruits already removed
+            lives--; updateHearts();
+            if(lives<=0){ triggerGameOver(); continue; }
+          }
         }
       }
       drawHUD();
     }
 
-    for (let i = halfFruits.length - 1; i >= 0; i--) { halfFruits[i].update(); halfFruits[i].draw(); if (halfFruits[i].life <= 0) halfFruits.splice(i, 1); }
-    for (let i = particles.length - 1; i >= 0; i--) { particles[i].update(); particles[i].draw(); if (particles[i].life <= 0) particles.splice(i, 1); }
-    drawTrail(); checkSlice();
+    updateActionCircle();
 
-    if (readyToStart && startCircle && !startCircle.sliced) { startCircle.update(); startCircle.draw(actx); }
-    if (gameOverFlag && restartCircle && !restartCircle.sliced) { restartCircle.update(); restartCircle.draw(actx); }
+    // Half fruits (DOM) — just update physics, DOM handles display
+    for(let i=halfFruits.length-1;i>=0;i--){
+      halfFruits[i].update();
+      if(halfFruits[i].life<=0){ halfFruits[i].remove(); halfFruits.splice(i,1); }
+    }
+    // Particles (canvas)
+    for(let i=particles.length-1;i>=0;i--){
+      particles[i].update();particles[i].draw();
+      if(particles[i].life<=0)particles.splice(i,1);
+    }
 
-  } catch(e) { console.error('gameLoop error:', e); }
+    drawTrail();
+    checkSlice();
+  }catch(e){console.error('gameLoop:',e);}
   requestAnimationFrame(gameLoop);
 }
 
 // ─── Game Control ─────────────────────────────────────────────────────────────
-function showReadyScreen() {
-  readyToStart = true; gameActive = false; gameOverFlag = false;
-  startCircle = new ActionCircle('SLICE ME\nTO START', '🍉', { fill: '#06D6A0', glow: '#00ff99' });
-  restartCircle = null;
-}
-function startGame() {
-  score = 0; lives = 3; fruits = []; particles = []; halfFruits = []; slashTrail = [];
-  frameCount = 0; lastSliceTime = 0; readyToStart = false; gameOverFlag = false; gameActive = true;
-  startCircle = null; restartCircle = null;
-  document.getElementById('gameover-scrim').classList.remove('show');
-  document.getElementById('gameover-text').classList.remove('show');
-}
-function triggerGameOver() {
-  gameActive = false; gameOverFlag = true; fruits = [];
-  document.getElementById('final-score').textContent = 'Score: ' + score;
-  document.getElementById('gameover-scrim').classList.add('show');
-  document.getElementById('gameover-text').classList.add('show');
-  restartCircle = new ActionCircle('SLICE ME TO\nPLAY AGAIN', '🍊', { fill: '#F72585', glow: '#ff0099' });
+function clearFruits(){
+  fruits.forEach(f=>f.remove()); fruits=[];
+  halfFruits.forEach(h=>h.remove()); halfFruits=[];
 }
 
+function showReadyScreen(){
+  readyToStart=true; gameActive=false; gameOverFlag=false;
+  clearFruits();
+  document.getElementById('lives-display').style.display='none';
+  createActionCircle('🍉','SLICE ME\nTO START','#00ff99',startGame);
+}
+
+function startGame(){
+  score=0; lives=3;
+  clearFruits(); particles=[]; slashTrail=[];
+  frameCount=0; lastSliceTime=0;
+  readyToStart=false; gameOverFlag=false; gameActive=true;
+  actionLayer.innerHTML=''; actionCircleData=null;
+  hudCtx.clearRect(0,0,hudCanvas.width,hudCanvas.height);
+  document.getElementById('gameover-scrim').classList.remove('show');
+  document.getElementById('gameover-text').classList.remove('show');
+  updateHearts();
+}
+
+function triggerGameOver(){
+  gameActive=false; gameOverFlag=true;
+  clearFruits();
+  document.getElementById('lives-display').style.display='none';
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('gameover-scrim').classList.add('show');
+  document.getElementById('gameover-text').classList.add('show');
+  createActionCircle('🍊','SLICE ME TO\nPLAY AGAIN','#ff0099',startGame);
+}
+
+// ─── Lives offscreen fix ─────────────────────────────────────────────────────
+// Patch the fruit offscreen handler properly
+const _origGameLoop = gameLoop;
+// Override fruit offscreen removal inline — fixed version below in maybeSpawn area
+
 // ─── MediaPipe Hand Tracking ──────────────────────────────────────────────────
-function initHandTracking() {
-  const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-  hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.6 });
-  hands.onResults((results) => {
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      const tip = results.multiHandLandmarks[0][8];
-      addTrailPoint((1 - tip.x) * canvas.width, tip.y * canvas.height);
-    } else { if (slashTrail.length > 0) slashTrail.shift(); }
+function initHandTracking(){
+  const hands=new Hands({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.7,minTrackingConfidence:0.6});
+  hands.onResults((results)=>{
+    if(results.multiHandLandmarks&&results.multiHandLandmarks.length>0){
+      const tip=results.multiHandLandmarks[0][8];
+      addTrailPoint((1-tip.x)*canvas.width,tip.y*canvas.height);
+    } else { if(slashTrail.length>0)slashTrail.shift(); }
   });
-  const camera = new Camera(video, { onFrame: async () => { await hands.send({ image: video }); }, width: 1280, height: 720 });
-  document.getElementById('status-icon').textContent = '🤚';
-  document.getElementById('status-text').textContent = 'Loading Hand Tracking';
-  document.getElementById('status-sub').textContent = 'Just a moment...';
-  camera.start().then(() => {
-    video.style.opacity = '1';
+  const camera=new Camera(video,{
+    onFrame:async()=>{await hands.send({image:video});},width:1280,height:720
+  });
+  document.getElementById('status-icon').textContent='🤚';
+  document.getElementById('status-text').textContent='Loading Hand Tracking';
+  document.getElementById('status-sub').textContent='Just a moment...';
+  camera.start().then(()=>{
+    video.style.opacity='1';
     document.getElementById('loading').classList.add('hidden');
     showReadyScreen();
-  }).catch(() => {
-    document.getElementById('loading').innerHTML = `
+  }).catch(()=>{
+    document.getElementById('loading').innerHTML=`
       <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px;text-align:center;">
         <div style="font-size:64px;color:#ff4444;">✕</div>
         <div style="color:#fff;font-size:22px;letter-spacing:3px;text-transform:uppercase;font-weight:bold;">Camera Error</div>
@@ -448,8 +614,7 @@ function initHandTracking() {
         <div style="color:rgba(255,255,255,0.35);font-size:12px;max-width:300px;line-height:1.6;margin-top:8px;">
           Camera access is blocked in embedded frames. Open the game directly for the full AR experience.
         </div>
-        <a href="https://otanyjoseph.github.io/ai-projects/finger-tracking-fruit-ninja.html"
-          target="_blank"
+        <a href="https://otanyjoseph.github.io/ai-projects/finger-tracking-fruit-ninja.html" target="_blank"
           style="margin-top:16px;padding:16px 36px;background:linear-gradient(135deg,#06D6A0,#4CC9F0);color:#000;font-size:15px;font-weight:900;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border-radius:50px;box-shadow:0 0 30px rgba(6,214,160,0.5);display:inline-block;">
           Open Full Experience →
         </a>
@@ -458,7 +623,48 @@ function initHandTracking() {
   });
 }
 
-gameLoop();
+// ─── Fixed game loop with correct offscreen life deduction ────────────────────
+function runGame(){
+  try{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if(readyToStart&&!gameActive&&!gameOverFlag) drawReadyScreen();
+
+    if(gameActive){
+      maybeSpawn();
+      for(let i=fruits.length-1;i>=0;i--){
+        const f=fruits[i];
+        f.update();
+        if(f.isOffScreen()){
+          f.remove(); fruits.splice(i,1);
+          if(!f.isBomb){
+            lives--;
+            updateHearts();
+            if(lives<=0){ triggerGameOver(); }
+          }
+        }
+      }
+      drawHUD();
+    }
+
+    updateActionCircle();
+
+    for(let i=halfFruits.length-1;i>=0;i--){
+      halfFruits[i].update();
+      if(halfFruits[i].life<=0){ halfFruits[i].remove(); halfFruits.splice(i,1); }
+    }
+    for(let i=particles.length-1;i>=0;i--){
+      particles[i].update();particles[i].draw();
+      if(particles[i].life<=0)particles.splice(i,1);
+    }
+
+    drawTrail();
+    checkSlice();
+  }catch(e){console.error('runGame:',e);}
+  requestAnimationFrame(runGame);
+}
+
+runGame();
 initHandTracking();
 </script>
 </body>
