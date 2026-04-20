@@ -314,16 +314,20 @@ function frame(ts){
   // Update progress
   cars.forEach(c=>{
     const spd=(c.speed||0.032)*(0.9+0.1*Math.sin(ts*0.001+parseFloat(c.fbKey||'0')));
-    c.prog=((c.prog||0)+spd*dt)%1;
+    c.prog=Math.max(0,Math.min(0.9999,((c.prog||0)+spd*dt)%1));
   });
   // Painter's sort
   const sorted=[...cars].sort((a,b)=>{
-    const ia=Math.floor(a.prog*NP)%NP,ib=Math.floor(b.prog*NP)%NP;
-    return SPTS[ia].sy-SPTS[ib].sy;
+    const ia=Math.min(Math.floor((a.prog||0)*NP),NP-1);
+    const ib=Math.min(Math.floor((b.prog||0)*NP),NP-1);
+    const pa=SPTS[ia],pb=SPTS[ib];
+    if(!pa||!pb)return 0;
+    return pa.sy-pb.sy;
   });
   // Draw cars
   sorted.forEach(car=>{
-    const idx=Math.floor(car.prog*NP)%NP;
+    const idx=Math.min(Math.floor((car.prog||0)*NP),NP-1);
+    if(!SPTS[idx])return;
     const{sx,sy}=SPTS[idx];
     const ang=angAt(idx);
     if(Math.random()<0.05){
