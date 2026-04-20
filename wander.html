@@ -332,10 +332,10 @@ function frame(ts){
     const im=car.img?getImg(car.fbKey,car.img):null;
     if(im&&im.complete&&im.naturalWidth>0){
       const aspect=im.naturalWidth/im.naturalHeight;
-      const ch=24,cw=ch*Math.min(aspect,2.5);
+      const ch=38,cw=Math.max(ch*Math.min(aspect,2.8),44);
       tc.save();tc.translate(sx,sy);tc.rotate(ang);
       tc.fillStyle='rgba(0,0,0,0.16)';
-      tc.beginPath();tc.ellipse(1,6,cw*0.48,5,0,0,Math.PI*2);tc.fill();
+      tc.beginPath();tc.ellipse(1,7,cw*0.46,6,0,0,Math.PI*2);tc.fill();
       tc.imageSmoothingEnabled=false;
       tc.drawImage(im,-cw/2,-ch/2,cw,ch);
       tc.restore();
