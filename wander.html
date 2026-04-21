@@ -8,8 +8,8 @@
 body{background:#e8e2d4;font-family:'Nunito',sans-serif;display:flex;flex-direction:column;align-items:center;padding:20px 12px 32px}
 #wordmark{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;color:#1e3a10;letter-spacing:6px;text-transform:uppercase;margin-bottom:4px;font-variant:small-caps}
 #tagline{font-size:11px;font-weight:700;color:#a09070;letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
-#layout{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;justify-content:center;width:100%;max-width:1040px}
-#scene{position:relative;flex:1;min-width:300px;max-width:660px}
+#layout{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;justify-content:center;width:100%;max-width:1200px}
+#scene{position:relative;flex:1;min-width:340px;max-width:860px}
 #tc{width:100%;display:block;border-radius:18px;filter:drop-shadow(0 20px 48px rgba(0,0,0,0.26))}
 #live-pill{position:absolute;top:13px;left:13px;background:#1e3a10;color:#fff;font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;padding:5px 11px;border-radius:20px;display:flex;align-items:center;gap:5px}
 #live-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:blink 1.4s ease-in-out infinite}
@@ -46,7 +46,7 @@ body{background:#e8e2d4;font-family:'Nunito',sans-serif;display:flex;flex-direct
 
 <div id="layout">
   <div id="scene">
-    <canvas id="tc" width="640" height="520"></canvas>
+    <canvas id="tc" width="900" height="660"></canvas>
     <div id="live-pill"><div id="live-dot"></div>LIVE</div>
     <div id="car-pill">🚗 0 cars</div>
   </div>
@@ -99,22 +99,35 @@ const app = initializeApp({
 const db = getDatabase(app);
 const carsRef = query(ref(db,'wander_cars'), limitToLast(40));
 
-// ── Isometric math ──
+// ── Isometric — bigger canvas, shifted origin ──
 const TC = document.getElementById('tc');
 const tc = TC.getContext('2d');
-const W=640,H=520,OX=320,OY=112,SC=34;
-function iso(x,y,z=0){return{sx:OX+(x-y)*SC,sy:OY+(x+y)*SC*0.5-z*SC*0.72};}
+const W=900, H=660, OX=450, OY=130, SC=32;
+function iso(x,y,z=0){return{sx:OX+(x-y)*SC, sy:OY+(x+y)*SC*0.5-z*SC*0.72};}
 
-// ── Track ──
+// ── Longer track with many more curves ──
+// A winding figure-8 / ribbon layout that fills the bigger canvas
 const RAW=[
-  [0,0],[1.5,0],[3,0],[4.5,0.5],[5,1.5],[5,2.5],
-  [4.5,3.5],[3.5,4.5],[2.5,5],[1.5,4.5],[1,3.5],[0.5,2.5],
-  [0,2],[-0.5,2.5],[-1,3.5],[-1.5,4.5],[-1.5,5.5],[-1,6.5],
-  [0,7],[1,7.5],[2,7],[2.5,6],[3,6.5],[4,7.5],[4.5,8.5],
-  [4,9],[3,9],[2,9],[1,9],[0,9],[-1,8.5],[-1.5,7.5],[-1.5,6.5],
-  [-2,5.5],[-2.5,4],[-2.5,2.5],[-2,1.5],[-1,0.5]
+  // Start straight
+  [0,0],[1,0],[2,0],
+  // First sweeping right curve
+  [3,0.3],[4,1],[4.5,2],[4,3],[3,3.5],
+  // Tight left hairpin
+  [2,3.8],[1,4.5],[0.5,5.5],[1,6.5],[2,7],
+  // Long sweeping right loop
+  [3,7],[4,6.5],[5,6],[6,5.5],[6.5,4.5],[6,3.5],[5,3],
+  // S-bend through the middle
+  [4.5,2.5],[5,1.5],[6,1],[7,1.2],[7.5,2.2],[7,3.2],
+  // Wide outer loop top
+  [6.5,4],[6,5],[5.5,6],[5,7],[4.5,8],[3.5,9],[2.5,9.5],
+  // Left sweeper
+  [1.5,9],[0.5,8.5],[0,7.5],[0.2,6.5],[1,5.8],
+  // Inner chicane
+  [1.5,5],[0.8,4.2],[0,3.5],
+  // Final long sweep back to start
+  [-0.5,2.5],[-1,1.5],[-0.5,0.8]
 ];
-function catmull(pts,steps=22){
+function catmull(pts,steps=28){
   const n=pts.length,out=[];
   for(let i=0;i<n;i++){
     const p0=pts[(i-1+n)%n],p1=pts[i],p2=pts[(i+1)%n],p3=pts[(i+2)%n];
@@ -138,41 +151,48 @@ function edgePts(i,off){
   const{sx,sy}=SPTS[i],a=angAt(i),p=a+Math.PI/2;
   return{lx:sx+Math.cos(p)*off,ly:sy+Math.sin(p)*off,rx:sx-Math.cos(p)*off,ry:sy-Math.sin(p)*off};
 }
-const RW=SC*0.8;
+const RW=SC*0.85;
 
 // ── Static scene ──
 function drawScene(){
   tc.clearRect(0,0,W,H);
   tc.fillStyle='#cce8f6';tc.fillRect(0,0,W,H);
-  for(const[cx,cy,r] of [[110,52,26],[355,36,36],[560,62,20]]){
-    tc.fillStyle='rgba(255,255,255,0.86)';
+  // Clouds
+  for(const[cx,cy,r] of [[120,55,28],[420,38,38],[720,58,22],[260,44,20],[600,48,26]]){
+    tc.fillStyle='rgba(255,255,255,0.88)';
     for(const[dx,dy,cr] of [[0,0,r],[r*.68,-r*.33,r*.7],[r*-.52,-r*.22,r*.64]]){
       tc.beginPath();tc.arc(cx+dx,cy+dy,cr,0,Math.PI*2);tc.fill();
     }
   }
-  tc.save();tc.translate(16,24);tc.globalAlpha=0.13;drawGround('#000');tc.globalAlpha=1;tc.restore();
-  const gc=[[-3,-2],[7,-2],[7,11],[-3,11]].map(([x,y])=>iso(x,y,0));
+  // Ground shadow
+  tc.save();tc.translate(18,26);tc.globalAlpha=0.11;drawGround('#000');tc.globalAlpha=1;tc.restore();
+  // Ground side faces
+  const gc=[[-2,-2],[9,-2],[9,12],[-2,12]].map(([x,y])=>iso(x,y,0));
   tc.beginPath();tc.moveTo(gc[2].sx,gc[2].sy);tc.lineTo(gc[3].sx,gc[3].sy);
-  tc.lineTo(gc[3].sx,gc[3].sy+18);tc.lineTo(gc[2].sx,gc[2].sy+18);tc.closePath();
+  tc.lineTo(gc[3].sx,gc[3].sy+22);tc.lineTo(gc[2].sx,gc[2].sy+22);tc.closePath();
   tc.fillStyle='#5a8828';tc.fill();
   tc.beginPath();tc.moveTo(gc[1].sx,gc[1].sy);tc.lineTo(gc[2].sx,gc[2].sy);
-  tc.lineTo(gc[2].sx,gc[2].sy+18);tc.lineTo(gc[1].sx,gc[1].sy+18);tc.closePath();
+  tc.lineTo(gc[2].sx,gc[2].sy+22);tc.lineTo(gc[1].sx,gc[1].sy+22);tc.closePath();
   tc.fillStyle='#4a7820';tc.fill();
   drawGround('#88c84a');
-  for(let g=0;g<50;g++){
-    tc.fillStyle='rgba(60,140,30,0.08)';
-    tc.beginPath();tc.ellipse(70+Math.random()*500,70+Math.random()*360,9,4,Math.random()*Math.PI,0,Math.PI*2);tc.fill();
+  // Grass texture
+  for(let g=0;g<70;g++){
+    tc.fillStyle='rgba(60,140,30,0.07)';
+    tc.beginPath();tc.ellipse(80+Math.random()*740,80+Math.random()*480,10,5,Math.random()*Math.PI,0,Math.PI*2);tc.fill();
   }
+  // Road shadow
   for(let i=0;i<NP;i++){
     const c=edgePts(i,RW),n=edgePts((i+1)%NP,RW);
     tc.beginPath();tc.moveTo(c.rx,c.ry);tc.lineTo(n.rx,n.ry);
-    tc.lineTo(n.rx,n.ry+10);tc.lineTo(c.rx,c.ry+10);tc.closePath();
-    tc.fillStyle='rgba(40,38,52,0.44)';tc.fill();
+    tc.lineTo(n.rx,n.ry+12);tc.lineTo(c.rx,c.ry+12);tc.closePath();
+    tc.fillStyle='rgba(40,38,52,0.38)';tc.fill();
   }
+  // Road surface
   tc.beginPath();
   for(let i=0;i<NP;i++){const e=edgePts(i,RW);i===0?tc.moveTo(e.lx,e.ly):tc.lineTo(e.lx,e.ly);}
   for(let i=NP-1;i>=0;i--){const e=edgePts(i,RW);tc.lineTo(e.rx,e.ry);}
   tc.closePath();tc.fillStyle='#62607a';tc.fill();
+  // Road edges
   for(const side of [1,-1]){
     tc.beginPath();
     for(let i=0;i<NP;i++){
@@ -180,12 +200,14 @@ function drawScene(){
       const ex=sx+Math.cos(a)*RW*side,ey=sy+Math.sin(a)*RW*side;
       i===0?tc.moveTo(ex,ey):tc.lineTo(ex,ey);
     }
-    tc.closePath();tc.strokeStyle='rgba(215,208,192,0.52)';tc.lineWidth=1.5;tc.stroke();
+    tc.closePath();tc.strokeStyle='rgba(215,208,192,0.50)';tc.lineWidth=1.5;tc.stroke();
   }
-  tc.setLineDash([10,12]);tc.beginPath();
+  // Centre dashes
+  tc.setLineDash([11,13]);tc.beginPath();
   SPTS.forEach(({sx,sy},i)=>i===0?tc.moveTo(sx,sy):tc.lineTo(sx,sy));
-  tc.closePath();tc.strokeStyle='rgba(255,245,90,0.8)';tc.lineWidth=1.8;tc.stroke();
+  tc.closePath();tc.strokeStyle='rgba(255,245,90,0.82)';tc.lineWidth=1.8;tc.stroke();
   tc.setLineDash([]);
+  // Start/finish line
   const fe=edgePts(0,RW),fa=angAt(0),fp=fa+Math.PI/2;
   for(let k=0;k<6;k++){
     const t1=k/6,t2=(k+1)/6;
@@ -193,21 +215,27 @@ function drawScene(){
     const lx2=fe.lx+(fe.rx-fe.lx)*t2,ly2=fe.ly+(fe.ry-fe.ly)*t2;
     tc.fillStyle=k%2===0?'#fff':'#222';
     tc.beginPath();tc.moveTo(lx1,ly1);tc.lineTo(lx2,ly2);
-    tc.lineTo(lx2+Math.cos(fp)*8,ly2+Math.sin(fp)*8);
-    tc.lineTo(lx1+Math.cos(fp)*8,ly1+Math.sin(fp)*8);
+    tc.lineTo(lx2+Math.cos(fp)*9,ly2+Math.sin(fp)*9);
+    tc.lineTo(lx1+Math.cos(fp)*9,ly1+Math.sin(fp)*9);
     tc.closePath();tc.fill();
   }
-  for(const[tx,ty] of [[-1,1],[6,1],[5.5,4],[5,7],[-1.5,7],[1.5,6],[3,0.5],[0.5,8.5],[3.5,8.5],[-2,3]]){
-    const base=iso(tx,ty,0),top=iso(tx,ty,0.82);
+  // Trees — more of them scattered around bigger map
+  for(const[tx,ty] of [
+    [-1,0],[8,0],[8,3],[8,6],[7.5,9],
+    [-1.5,4],[-1.5,8],[3,10.5],[0,10],
+    [2,4.5],[4,4],[6,2.5],[5.5,8.5],
+    [1,2],[3,6],[6.5,7],[4,0.5],[2,8]
+  ]){
+    const base=iso(tx,ty,0),top=iso(tx,ty,0.9);
     tc.strokeStyle='#8b5c2a';tc.lineWidth=2.5;
     tc.beginPath();tc.moveTo(base.sx,base.sy);tc.lineTo(top.sx,top.sy);tc.stroke();
-    for(const[dx,dy,r,col] of [[0,0,12,'#386830'],[-2,-4,8,'#4a8a38'],[-2,-6,4.5,'#5aaa48']]){
+    for(const[dx,dy,r,col] of [[0,0,13,'#386830'],[-2,-4,9,'#4a8a38'],[-2,-7,5,'#5aaa48']]){
       tc.fillStyle=col;tc.beginPath();tc.arc(top.sx+dx,top.sy+dy,r,0,Math.PI*2);tc.fill();
     }
   }
 }
 function drawGround(fill){
-  const c=[[-3,-2],[7,-2],[7,11],[-3,11]].map(([x,y])=>iso(x,y,0));
+  const c=[[-2,-2],[9,-2],[9,12],[-2,12]].map(([x,y])=>iso(x,y,0));
   tc.beginPath();c.forEach(({sx,sy},i)=>i===0?tc.moveTo(sx,sy):tc.lineTo(sx,sy));
   tc.closePath();tc.fillStyle=fill;tc.fill();
 }
@@ -246,7 +274,7 @@ document.getElementById('clrbtn').addEventListener('click',()=>{
   dc.strokeStyle=bc;dc.lineWidth=bs;erasing=false;
 });
 
-// ── PNG export — always image/png, white background ──
+// ── PNG export ──
 function cropToPNG(canvas){
   const ctx=canvas.getContext('2d');
   const cw=canvas.width,ch=canvas.height;
@@ -270,12 +298,12 @@ function cropToPNG(canvas){
   octx.fillStyle='#ffffff';
   octx.fillRect(0,0,out.width,out.height);
   octx.drawImage(canvas,x0,y0,w,h,0,0,out.width,out.height);
-  return out.toDataURL('image/png');   // ← always PNG
+  return out.toDataURL('image/png');
 }
 
-// ── Car state: two Maps so Firebase refreshes never reset progress ──
-const carProgress = new Map();  // fbKey → 0..1
-const carMeta     = new Map();  // fbKey → firebase data object
+// ── Car state — progress never reset by Firebase ──
+const carProgress=new Map();
+const carMeta=new Map();
 const imc={};
 function getImg(key,src){
   if(!imc[key]){const im=new Image();im.src=src;imc[key]=im;}
@@ -286,26 +314,21 @@ function setStatus(msg,cls=''){
   el.textContent=msg;el.className=cls;
 }
 
-// Firebase listener — updates metadata only, never resets progress
 onValue(carsRef,snap=>{
   const data=snap.val();
   if(!data){carProgress.clear();carMeta.clear();
     document.getElementById('car-pill').textContent='🚗 0 cars on the road';return;}
   const live=new Set(Object.keys(data));
-  // Remove deleted cars
   for(const k of [...carProgress.keys()]) if(!live.has(k)){carProgress.delete(k);carMeta.delete(k);}
-  // Add / update
   for(const[k,v] of Object.entries(data)){
-    if(!carProgress.has(k)) carProgress.set(k,Math.random()); // spawn at random position once
+    if(!carProgress.has(k)) carProgress.set(k,Math.random());
     carMeta.set(k,v);
   }
   document.getElementById('car-pill').textContent=
     '🚗 '+carProgress.size+' car'+(carProgress.size!==1?'s':'')+' on the road';
 });
 
-// ── Exhaust puffs ──
 let puffs=[];
-
 function rrect(ctx,x,y,w,h,r){
   ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);
   ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);
@@ -321,14 +344,11 @@ function frame(ts){
   last=ts;
   tc.putImageData(SCENE,0,0);
 
-  // Advance progress for every car
   for(const[k,v] of carMeta){
-    // +v.speed coerces string→number; fallback 0.032 if missing/NaN
-    const spd=(+v.speed||0.032)*(0.9+0.1*Math.sin(ts*0.001+(k.charCodeAt(1)||0)));
+    const spd=(+v.speed||0.022)*(0.9+0.1*Math.sin(ts*0.001+(k.charCodeAt(1)||0)));
     carProgress.set(k,((carProgress.get(k)||0)+spd*dt)%1);
   }
 
-  // Painter's sort: draw cars lower on screen last (on top)
   const keys=[...carMeta.keys()].sort((a,b)=>{
     const ia=Math.floor((carProgress.get(a)||0)*NP)%NP;
     const ib=Math.floor((carProgress.get(b)||0)*NP)%NP;
@@ -342,8 +362,8 @@ function frame(ts){
     if(!SPTS[idx])continue;
     const{sx,sy}=SPTS[idx];
     const ang=angAt(idx);
-    if(Math.random()<0.05)
-      puffs.push({x:sx+Math.cos(ang+Math.PI)*15,y:sy+Math.sin(ang+Math.PI)*15,life:1,r:3});
+    if(Math.random()<0.04)
+      puffs.push({x:sx+Math.cos(ang+Math.PI)*16,y:sy+Math.sin(ang+Math.PI)*16,life:1,r:3});
     const im=car.img?getImg(k,car.img):null;
     if(im&&im.complete&&im.naturalWidth>0){
       const aspect=im.naturalWidth/im.naturalHeight;
@@ -374,8 +394,8 @@ function frame(ts){
 
   puffs=puffs.filter(p=>p.life>0);
   puffs.forEach(p=>{
-    p.life-=0.026;p.r+=0.2;p.y-=0.3;
-    tc.globalAlpha=p.life*0.28;
+    p.life-=0.024;p.r+=0.22;p.y-=0.28;
+    tc.globalAlpha=p.life*0.26;
     tc.fillStyle='#ccc';tc.beginPath();tc.arc(p.x,p.y,p.r,0,Math.PI*2);tc.fill();
   });
   tc.globalAlpha=1;
@@ -395,8 +415,7 @@ document.getElementById('pbtn').addEventListener('click',async()=>{
   const img=cropToPNG(DC);
   if(!img){setStatus('✏️ Draw something first!','err');btn.disabled=false;btn.textContent='🏁 Put on Wander!';return;}
   const name=document.getElementById('cname').value.trim();
-  // speed stored as a proper JS number, never a string
-  const car={img,name:name||null,color:bc,speed:+(0.024+Math.random()*0.040).toFixed(4),ts:Date.now()};
+  const car={img,name:name||null,color:bc,speed:+(0.018+Math.random()*0.028).toFixed(4),ts:Date.now()};
   try{
     await push(ref(db,'wander_cars'),car);
     setStatus('🏁 Your car is on Wander!','ok');
