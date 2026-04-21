@@ -311,10 +311,10 @@ function frame(ts){
   const dt=Math.min((ts-last)/1000,0.05);last=ts;
   // Restore clean scene — no cars baked in
   tc.putImageData(SCENE,0,0);
-  // Update progress
+  // Update progress — FIX: coerce speed to number with unary +, remove clamp that fought %1 wraparound
   cars.forEach(c=>{
-    const spd=(c.speed||0.032)*(0.9+0.1*Math.sin(ts*0.001+parseFloat(c.fbKey||'0')));
-    c.prog=Math.max(0,Math.min(0.9999,((c.prog||0)+spd*dt)%1));
+    const spd=(+c.speed||0.032)*(0.9+0.1*Math.sin(ts*0.001+parseFloat(c.fbKey||'0')));
+    c.prog=((c.prog||0)+spd*dt)%1;
   });
   // Painter's sort
   const sorted=[...cars].sort((a,b)=>{
