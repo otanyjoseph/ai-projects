@@ -99,13 +99,13 @@ const app = initializeApp({
 const db = getDatabase(app);
 const carsRef = query(ref(db,'wander_cars'), limitToLast(40));
 
-// Isometric math
+// ── Isometric math ──
 const TC = document.getElementById('tc');
 const tc = TC.getContext('2d');
-const W=640, H=520, OX=320, OY=112, SC=34;
-function iso(x,y,z=0){return{sx:OX+(x-y)*SC, sy:OY+(x+y)*SC*0.5-z*SC*0.72};}
+const W=640,H=520,OX=320,OY=112,SC=34;
+function iso(x,y,z=0){return{sx:OX+(x-y)*SC,sy:OY+(x+y)*SC*0.5-z*SC*0.72};}
 
-// Track path
+// ── Track ──
 const RAW=[
   [0,0],[1.5,0],[3,0],[4.5,0.5],[5,1.5],[5,2.5],
   [4.5,3.5],[3.5,4.5],[2.5,5],[1.5,4.5],[1,3.5],[0.5,2.5],
@@ -140,7 +140,7 @@ function edgePts(i,off){
 }
 const RW=SC*0.8;
 
-// Draw static scene
+// ── Static scene ──
 function drawScene(){
   tc.clearRect(0,0,W,H);
   tc.fillStyle='#cce8f6';tc.fillRect(0,0,W,H);
@@ -211,12 +211,10 @@ function drawGround(fill){
   tc.beginPath();c.forEach(({sx,sy},i)=>i===0?tc.moveTo(sx,sy):tc.lineTo(sx,sy));
   tc.closePath();tc.fillStyle=fill;tc.fill();
 }
-
-// Cache scene BEFORE animation loop — no cars in snapshot
 drawScene();
-const SCENE = tc.getImageData(0,0,W,H);
+const SCENE=tc.getImageData(0,0,W,H);
 
-// Drawing canvas
+// ── Draw canvas ──
 const DC=document.getElementById('dc');
 const dc=DC.getContext('2d');
 dc.fillStyle='#fff';dc.fillRect(0,0,210,155);
@@ -248,7 +246,7 @@ document.getElementById('clrbtn').addEventListener('click',()=>{
   dc.strokeStyle=bc;dc.lineWidth=bs;erasing=false;
 });
 
-// PNG auto-crop
+// ── PNG export — always image/png, white background ──
 function cropToPNG(canvas){
   const ctx=canvas.getContext('2d');
   const cw=canvas.width,ch=canvas.height;
@@ -268,12 +266,16 @@ function cropToPNG(canvas){
   const scale=Math.min(1,MAX/Math.max(w,h));
   const out=document.createElement('canvas');
   out.width=Math.round(w*scale);out.height=Math.round(h*scale);
-  out.getContext('2d').drawImage(canvas,x0,y0,w,h,0,0,out.width,out.height);
-  return out.toDataURL('image/png');
+  const octx=out.getContext('2d');
+  octx.fillStyle='#ffffff';
+  octx.fillRect(0,0,out.width,out.height);
+  octx.drawImage(canvas,x0,y0,w,h,0,0,out.width,out.height);
+  return out.toDataURL('image/png');   // ← always PNG
 }
 
-// Cars
-let cars=[];
+// ── Car state: two Maps so Firebase refreshes never reset progress ──
+const carProgress = new Map();  // fbKey → 0..1
+const carMeta     = new Map();  // fbKey → firebase data object
 const imc={};
 function getImg(key,src){
   if(!imc[key]){const im=new Image();im.src=src;imc[key]=im;}
@@ -284,17 +286,24 @@ function setStatus(msg,cls=''){
   el.textContent=msg;el.className=cls;
 }
 
-// Firebase realtime listener
+// Firebase listener — updates metadata only, never resets progress
 onValue(carsRef,snap=>{
   const data=snap.val();
-  const incoming=data?Object.entries(data).map(([k,v])=>({fbKey:k,...v})):[];
-  const byKey={};
-  cars.forEach(c=>byKey[c.fbKey]=c.prog);
-  cars=incoming.map(c=>({...c,prog:byKey[c.fbKey]??Math.random()}));
-  document.getElementById('car-pill').textContent='🚗 '+cars.length+' car'+(cars.length!==1?'s':'')+' on the road';
+  if(!data){carProgress.clear();carMeta.clear();
+    document.getElementById('car-pill').textContent='🚗 0 cars on the road';return;}
+  const live=new Set(Object.keys(data));
+  // Remove deleted cars
+  for(const k of [...carProgress.keys()]) if(!live.has(k)){carProgress.delete(k);carMeta.delete(k);}
+  // Add / update
+  for(const[k,v] of Object.entries(data)){
+    if(!carProgress.has(k)) carProgress.set(k,Math.random()); // spawn at random position once
+    carMeta.set(k,v);
+  }
+  document.getElementById('car-pill').textContent=
+    '🚗 '+carProgress.size+' car'+(carProgress.size!==1?'s':'')+' on the road';
 });
 
-// Puffs
+// ── Exhaust puffs ──
 let puffs=[];
 
 function rrect(ctx,x,y,w,h,r){
@@ -305,35 +314,37 @@ function rrect(ctx,x,y,w,h,r){
   ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
 }
 
-// Render loop
-let last=0;
+// ── Render loop ──
+let last=performance.now();
 function frame(ts){
-  const dt=Math.min((ts-last)/1000,0.05);last=ts;
-  // Restore clean scene — no cars baked in
+  const dt=Math.min((ts-last)/1000,0.05);
+  last=ts;
   tc.putImageData(SCENE,0,0);
-  // Update progress — FIX: coerce speed to number with unary +, remove clamp that fought %1 wraparound
-  cars.forEach(c=>{
-    const spd=(+c.speed||0.032)*(0.9+0.1*Math.sin(ts*0.001+parseFloat(c.fbKey||'0')));
-    c.prog=((c.prog||0)+spd*dt)%1;
+
+  // Advance progress for every car
+  for(const[k,v] of carMeta){
+    // +v.speed coerces string→number; fallback 0.032 if missing/NaN
+    const spd=(+v.speed||0.032)*(0.9+0.1*Math.sin(ts*0.001+(k.charCodeAt(1)||0)));
+    carProgress.set(k,((carProgress.get(k)||0)+spd*dt)%1);
+  }
+
+  // Painter's sort: draw cars lower on screen last (on top)
+  const keys=[...carMeta.keys()].sort((a,b)=>{
+    const ia=Math.floor((carProgress.get(a)||0)*NP)%NP;
+    const ib=Math.floor((carProgress.get(b)||0)*NP)%NP;
+    return (SPTS[ia]?.sy||0)-(SPTS[ib]?.sy||0);
   });
-  // Painter's sort
-  const sorted=[...cars].sort((a,b)=>{
-    const ia=Math.min(Math.floor((a.prog||0)*NP),NP-1);
-    const ib=Math.min(Math.floor((b.prog||0)*NP),NP-1);
-    const pa=SPTS[ia],pb=SPTS[ib];
-    if(!pa||!pb)return 0;
-    return pa.sy-pb.sy;
-  });
-  // Draw cars
-  sorted.forEach(car=>{
-    const idx=Math.min(Math.floor((car.prog||0)*NP),NP-1);
-    if(!SPTS[idx])return;
+
+  for(const k of keys){
+    const car=carMeta.get(k);
+    const prog=carProgress.get(k)||0;
+    const idx=Math.floor(prog*NP)%NP;
+    if(!SPTS[idx])continue;
     const{sx,sy}=SPTS[idx];
     const ang=angAt(idx);
-    if(Math.random()<0.05){
+    if(Math.random()<0.05)
       puffs.push({x:sx+Math.cos(ang+Math.PI)*15,y:sy+Math.sin(ang+Math.PI)*15,life:1,r:3});
-    }
-    const im=car.img?getImg(car.fbKey,car.img):null;
+    const im=car.img?getImg(k,car.img):null;
     if(im&&im.complete&&im.naturalWidth>0){
       const aspect=im.naturalWidth/im.naturalHeight;
       const ch=38,cw=Math.max(ch*Math.min(aspect,2.8),44);
@@ -359,8 +370,8 @@ function frame(ts){
       tc.fillStyle='#3d2b1f';tc.fillText(car.name,sx,sy-19);
       tc.restore();
     }
-  });
-  // Puffs
+  }
+
   puffs=puffs.filter(p=>p.life>0);
   puffs.forEach(p=>{
     p.life-=0.026;p.r+=0.2;p.y-=0.3;
@@ -370,22 +381,22 @@ function frame(ts){
   tc.globalAlpha=1;
   requestAnimationFrame(frame);
 }
-requestAnimationFrame(ts=>{last=ts;frame(ts);});
+requestAnimationFrame(frame);
 
-// Plant
+// ── Submit ──
 document.getElementById('pbtn').addEventListener('click',async()=>{
   const btn=document.getElementById('pbtn');
   const px=dc.getImageData(0,0,210,155).data;
   let hasContent=false;
-  for(let i=0;i<px.length;i+=4){
+  for(let i=0;i<px.length;i+=4)
     if(px[i+3]>10&&!(px[i]>240&&px[i+1]>240&&px[i+2]>240)){hasContent=true;break;}
-  }
   if(!hasContent){setStatus('✏️ Draw your car first!','err');return;}
   btn.disabled=true;btn.textContent='⏳ Sending to Wander...';setStatus('');
   const img=cropToPNG(DC);
   if(!img){setStatus('✏️ Draw something first!','err');btn.disabled=false;btn.textContent='🏁 Put on Wander!';return;}
   const name=document.getElementById('cname').value.trim();
-  const car={img,name:name||null,color:bc,speed:0.024+Math.random()*0.040,ts:Date.now()};
+  // speed stored as a proper JS number, never a string
+  const car={img,name:name||null,color:bc,speed:+(0.024+Math.random()*0.040).toFixed(4),ts:Date.now()};
   try{
     await push(ref(db,'wander_cars'),car);
     setStatus('🏁 Your car is on Wander!','ok');
@@ -394,8 +405,7 @@ document.getElementById('pbtn').addEventListener('click',async()=>{
     document.getElementById('cname').value='';
     setTimeout(()=>setStatus(''),4000);
   }catch(e){
-    console.error(e);
-    setStatus('❌ '+e.message,'err');
+    console.error(e);setStatus('❌ '+e.message,'err');
   }
   btn.disabled=false;btn.textContent='🏁 Put on Wander!';
 });
