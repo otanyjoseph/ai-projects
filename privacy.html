@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>👁️ The Dark Room</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Patrick+Hand&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --black: #000000;
+    --bulb-glow: #fffbe6;
+    --bulb-color: #ffd54f;
+    --switch-on: #ffd54f;
+    --switch-off: #555;
+  }
+
+  body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #000;
+    cursor: none;
+    font-family: 'Patrick Hand', cursive;
+    user-select: none;
+  }
+
+  /* ── CURSOR ── */
+  #cursor {
+    position: fixed;
+    width: 14px;
+    height: 14px;
+    background: rgba(255,255,255,0.85);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 99999;
+    transform: translate(-50%, -50%);
+    mix-blend-mode: difference;
+    transition: transform 0.06s ease;
+  }
+  body.lights-on #cursor {
+    background: #ff6bbb;
+    mix-blend-mode: normal;
+    box-shadow: 0 0 0 2px white, 0 0 8px #ff6bbb;
+  }
+
+  /* ── DARK OVERLAY ── */
+  #room {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 1;
+    transition: background 0.6s ease;
+  }
+  body.lights-on #room {
+    background: #fdf6ec;
+    background-image:
+      radial-gradient(circle at 20% 20%, #fff3e0 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, #fce4ec 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, #e8f5e9 0%, transparent 60%);
+  }
+
+  /* ── LIGHT SWITCH ── */
+  #switch-wrap {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: none;
+    pointer-events: none;
+  }
+
+  #switch-plate {
+    pointer-events: all;
+  }
+
+  #bulb {
+    width: 36px;
+    height: 44px;
+    position: relative;
+    filter: drop-shadow(0 0 12px #ffd54f66);
+    transition: filter 0.4s ease;
+  }
+  body.lights-on #bulb {
+    filter: drop-shadow(0 0 22px #ffd54f) drop-shadow(0 0 40px #ffd54faa);
+  }
+
+  .bulb-svg { width: 100%; height: 100%; }
+
+  #switch-plate {
+    width: 34px;
+    height: 56px;
+    background: #1a1a1a;
+    border-radius: 6px;
+    border: 2px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    transition: border-color 0.3s;
+    cursor: none;
+  }
+  body.lights-on #switch-plate {
+    border-color: #666;
+  }
+
+  #switch-toggle {
+    width: 18px;
+    height: 30px;
+    background: var(--switch-off);
+    border-radius: 4px;
+    transition: background 0.2s, transform 0.2s;
+    transform: translateY(6px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  }
+  body.lights-on #switch-toggle {
+    background: var(--switch-on);
+    transform: translateY(-6px);
+    box-shadow: 0 0 8px #ffd54f88;
+  }
+
+  #switch-label {
+    font-size: 11px;
+    color: #555;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.3s;
+  }
+  body.lights-on #switch-label {
+    color: #aaa;
+  }
+
+  /* ── EYES ── */
+  #eyes-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  body.lights-on #eyes-layer {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .eye-wrap {
+    position: absolute;
+    border-radius: 50%;
+    cursor: none;
+    pointer-events: all;
+    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1);
+  }
+
+  .eye-outer {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: white;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 -4px 8px rgba(0,0,0,0.1), inset 2px -2px 6px rgba(255,255,255,0.8);
+    transition: box-shadow 0.3s;
+  }
+
+  .eye-wrap.angry .eye-outer {
+    background: #ffe0e0;
+    box-shadow: inset 0 -4px 8px rgba(200,0,0,0.15), 0 0 12px rgba(255,50,50,0.4);
+  }
+
+  .eyelid {
+    position: absolute;
+    width: 110%;
+    left: -5%;
+    border-radius: 50%;
+    z-index: 10;
+    pointer-events: none;
+    transition: height 0.08s ease, top 0.08s ease, bottom 0.08s ease;
+  }
+  .eyelid-top { top: -60%; height: 60%; transform-origin: bottom center; }
+  .eyelid-bottom { bottom: -60%; height: 60%; transform-origin: top center; }
+
+  .eye-wrap.blinking .eyelid-top { animation: blinkT 0.16s ease forwards; }
+  .eye-wrap.blinking .eyelid-bottom { animation: blinkB 0.16s ease forwards; }
+
+  @keyframes blinkT { 0%{top:-60%} 50%{top:0%} 100%{top:-60%} }
+  @keyframes blinkB { 0%{bottom:-60%} 50%{bottom:0%} 100%{bottom:-60%} }
+
+  .eyeball {
+    position: absolute;
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transition: transform 0.1s cubic-bezier(0.34,1.56,0.64,1);
+    will-change: transform;
+  }
+
+  .pupil {
+    position: absolute;
+    border-radius: 50%;
+    background: #1a1a2e;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+  }
+  .pupil::after {
+    content: '';
+    position: absolute;
+    width: 33%;
+    height: 33%;
+    background: white;
+    border-radius: 50%;
+    top: 14%; left: 14%;
+  }
+
+  .eye-wrap.angry .pupil { background: #3d0000; }
+
+  /* veins for angry */
+  .vein {
+    position: absolute;
+    background: rgba(200,0,0,0.5);
+    border-radius: 2px;
+    transform-origin: center;
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  /* ── TEARS ── */
+  .tear {
+    position: absolute;
+    width: 5px;
+    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    background: linear-gradient(180deg, #a8d8ff, #5badff);
+    opacity: 0.9;
+    animation: tearFall linear forwards;
+    pointer-events: none;
+    z-index: 20;
+  }
+  @keyframes tearFall {
+    0%   { transform: translateY(0) scaleY(0.5); opacity: 0.9; }
+    100% { transform: translateY(80px) scaleY(1.2); opacity: 0; }
+  }
+
+  /* ── OUCH LABEL ── */
+  .ouch-label {
+    position: fixed;
+    font-family: 'Creepster', cursive;
+    font-size: 22px;
+    color: #ff3c5a;
+    pointer-events: none;
+    z-index: 99998;
+    animation: ouchFloat 0.9s ease forwards;
+    text-shadow: 0 0 8px #ff3c5a88;
+    white-space: nowrap;
+  }
+  @keyframes ouchFloat {
+    0%   { transform: translateY(0) scale(0.5); opacity: 1; }
+    40%  { transform: translateY(-30px) scale(1.2); opacity: 1; }
+    100% { transform: translateY(-70px) scale(0.8); opacity: 0; }
+  }
+
+  /* ── SHAKE ── */
+  @keyframes shake {
+    0%,100%{ transform: translate(0,0) rotate(0deg); }
+    15%{ transform: translate(-5px,-3px) rotate(-3deg); }
+    30%{ transform: translate(5px,2px) rotate(3deg); }
+    45%{ transform: translate(-4px,4px) rotate(-2deg); }
+    60%{ transform: translate(4px,-3px) rotate(2deg); }
+    75%{ transform: translate(-3px,2px) rotate(-1deg); }
+  }
+  .shaking { animation: shake 0.45s ease; }
+
+  /* ── SPAWN animation ── */
+  @keyframes eyePop {
+    0%  { transform: scale(0) rotate(-20deg); opacity: 0; }
+    70% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+    100%{ transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  .eye-wrap { animation: eyePop 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+  /* ── RUNAWAY ── */
+  .running {
+    transition: left 0.5s cubic-bezier(0.22,1,0.36,1), top 0.5s cubic-bezier(0.22,1,0.36,1) !important;
+  }
+
+  /* ── HINT ── */
+  #hint {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #333;
+    font-size: 12px;
+    letter-spacing: 2px;
+    z-index: 99990;
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+  }
+  body.lights-on #hint { opacity: 1; color: #999; }
+
+  /* ── FLICKER ── */
+  @keyframes flicker {
+    0%,100%{ opacity:1 }
+    92%{ opacity:1 }
+    93%{ opacity:0.4 }
+    94%{ opacity:1 }
+    96%{ opacity:0.7 }
+    97%{ opacity:1 }
+  }
+  #switch-wrap { animation: flicker 4s infinite; }
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="room"></div>
+<div id="eyes-layer"></div>
+<div id="hint">find the switch to escape 💡</div>
+
+<!-- SWITCH -->
+<div id="switch-wrap">
+  <svg class="bulb-svg" id="bulb" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- wire -->
+    <line x1="18" y1="0" x2="18" y2="6" stroke="#888" stroke-width="2"/>
+    <!-- glow circle behind -->
+    <circle cx="18" cy="20" r="13" fill="#ffd54f" opacity="0.15" class="glow-ring"/>
+    <!-- bulb body -->
+    <path d="M10 20 C10 13 26 13 26 20 C26 25 23 28 21 30 L21 34 C21 35 19.5 36 18 36 C16.5 36 15 35 15 34 L15 30 C13 28 10 25 10 20Z" fill="#ffd54f" stroke="#e6b800" stroke-width="1.5"/>
+    <!-- filament -->
+    <path d="M15.5 30 L15.5 27 Q17 25 18 27 Q19 29 20.5 27 L20.5 30" stroke="#e6b800" stroke-width="1" fill="none"/>
+    <!-- base lines -->
+    <line x1="15" y1="31" x2="21" y2="31" stroke="#c8a000" stroke-width="1"/>
+    <line x1="15.5" y1="33" x2="20.5" y2="33" stroke="#c8a000" stroke-width="1"/>
+  </svg>
+  <div id="switch-plate">
+    <div id="switch-toggle"></div>
+  </div>
+  <div id="switch-label">lights</div>
+</div>
+
+<script>
+// ── STATE ──
+let lightsOn = false;
+let mouseX = window.innerWidth / 2;
+let mouseY = window.innerHeight / 2;
+let eyes = [];
+
+const body = document.body;
+const cursor = document.getElementById('cursor');
+const eyesLayer = document.getElementById('eyes-layer');
+const switchWrap = document.getElementById('switch-wrap');
+
+// ── CURSOR ──
+document.addEventListener('mousemove', e => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+  cursor.style.left = mouseX + 'px';
+  cursor.style.top = mouseY + 'px';
+  if (lightsOn) checkCollisions();
+});
+
+// ── SWITCH POSITION ──
+function placeSwitch() {
+  const sw = switchWrap.getBoundingClientRect();
+  const margin = 60;
+  const x = margin + Math.random() * (window.innerWidth - margin * 2 - 60);
+  const y = margin + Math.random() * (window.innerHeight - margin * 2 - 100);
+  switchWrap.style.left = x + 'px';
+  switchWrap.style.top = y + 'px';
+}
+placeSwitch();
+
+// switch click handled on plate below
+
+// ── EYE DATA ──
+const IRIS_COLORS = [
+  { iris: '#5b9bd5', hi: '#89c4f4' },
+  { iris: '#4caf7d', hi: '#80cfa9' },
+  { iris: '#d4875e', hi: '#e8a882' },
+  { iris: '#9b6bb5', hi: '#c09ad0' },
+  { iris: '#e05c8a', hi: '#f092b4' },
+  { iris: '#5c8ae0', hi: '#8ab4f0' },
+  { iris: '#d4a017', hi: '#e8c060' },
+  { iris: '#6bbfbf', hi: '#9ad9d9' },
+];
+const OUCH_WORDS = ['Ouch!','Ow!','Hey!!','Stop!','😢','Ooof!','Nooo!','😤','Eeek!','Quit it!'];
+const EYE_SIZES = [40,50,60,72,84,96,108,56,68,46];
+
+function rnd(a,b){ return a + Math.random()*(b-a); }
+
+// ── SPAWN EYES ──
+function spawnEyes() {
+  eyesLayer.innerHTML = '';
+  eyes = [];
+  const W = window.innerWidth, H = window.innerHeight;
+  const count = Math.floor(rnd(24, 38));
+  const placed = [];
+
+  for (let attempt = 0; attempt < count * 15 && placed.length < count; attempt++) {
+    const size = EYE_SIZES[Math.floor(Math.random() * EYE_SIZES.length)];
+    const x = rnd(size * 0.6, W - size * 0.6);
+    const y = rnd(size * 0.6, H - size * 0.6);
+
+    const overlap = placed.some(p => {
+      const dx = p.x - x, dy = p.y - y;
+      return Math.sqrt(dx*dx+dy*dy) < (p.size + size) * 0.42;
+    });
+    if (overlap) continue;
+
+    placed.push({x, y, size});
+    const eyeObj = buildEye(x, y, size, placed.length * 30);
+    eyes.push(eyeObj);
+  }
+}
+
+function buildEye(x, y, size, delay) {
+  const color = IRIS_COLORS[Math.floor(Math.random()*IRIS_COLORS.length)];
+  const eyeballSize = size * 0.52;
+  const irisSize = eyeballSize * 0.72;
+  const pupilSize = irisSize * 0.46;
+  const skinTone = `hsl(${rnd(10,35)}, ${rnd(50,70)}%, ${rnd(68,82)}%)`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'eye-wrap';
+  wrap.style.width = size + 'px';
+  wrap.style.height = size + 'px';
+  wrap.style.left = (x - size/2) + 'px';
+  wrap.style.top  = (y - size/2) + 'px';
+  wrap.style.animationDelay = delay + 'ms';
+  wrap.style.filter = `drop-shadow(2px 4px 8px rgba(0,0,0,0.18))`;
+
+  const outer = document.createElement('div');
+  outer.className = 'eye-outer';
+  outer.style.borderRadius = '50%';
+  outer.style.border = `${Math.max(2, size*0.04)}px solid #2a2a2a`;
+
+  // eyelids
+  ['eyelid-top','eyelid-bottom'].forEach(cls => {
+    const lid = document.createElement('div');
+    lid.className = `eyelid ${cls}`;
+    lid.style.background = skinTone;
+    lid.style.border = `${Math.max(1.5, size*0.035)}px solid #2a2a2a`;
+    if (cls === 'eyelid-top') lid.style.borderBottomColor = 'transparent';
+    else lid.style.borderTopColor = 'transparent';
+    outer.appendChild(lid);
+  });
+
+  // iris/eyeball
+  const eyeball = document.createElement('div');
+  eyeball.className = 'eyeball';
+  const hs = eyeballSize/2;
+  eyeball.style.cssText = `width:${eyeballSize}px;height:${eyeballSize}px;margin-top:-${hs}px;margin-left:-${hs}px;background:radial-gradient(circle at 35% 35%, ${color.hi}, ${color.iris});box-shadow:inset 0 2px 4px rgba(0,0,0,0.2);`;
+
+  const pupil = document.createElement('div');
+  pupil.className = 'pupil';
+  pupil.style.width = pupilSize + 'px';
+  pupil.style.height = pupilSize + 'px';
+
+  // random lashes
+  const lashCount = Math.floor(rnd(0,10));
+  for (let i = 0; i < lashCount; i++) {
+    const lash = document.createElement('div');
+    lash.className = 'lash';
+    const angle = (i/lashCount)*360 - 90;
+    const lw = Math.max(1.5, size*0.025), lh = Math.max(4, size*0.11);
+    lash.style.cssText = `position:absolute;background:#333;border-radius:2px;width:${lw}px;height:${lh}px;left:calc(50% - ${lw/2}px);bottom:calc(50% + ${size*0.44}px);transform-origin:50% ${lh}px;transform:rotate(${angle}deg);z-index:11;pointer-events:none;`;
+    outer.appendChild(lash);
+  }
+
+  eyeball.appendChild(pupil);
+  outer.appendChild(eyeball);
+  wrap.appendChild(outer);
+  eyesLayer.appendChild(wrap);
+
+  // blink
+  let blinkTimer;
+  function scheduleBlink() {
+    blinkTimer = setTimeout(() => {
+      wrap.classList.add('blinking');
+      setTimeout(() => { wrap.classList.remove('blinking'); scheduleBlink(); }, 200);
+    }, rnd(1500, 5500));
+  }
+  scheduleBlink();
+
+  const obj = {
+    el: wrap, eyeball, size, x, y,
+    angry: 0,
+    blinkTimer,
+    color,
+    irisSize, eyeballSize, pupilSize,
+    outer,
+  };
+  return obj;
+}
+
+function destroyEyes() {
+  eyes.forEach(e => {
+    e.el.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+    e.el.style.transform = 'scale(0)';
+    e.el.style.opacity = '0';
+  });
+  setTimeout(() => { eyesLayer.innerHTML = ''; eyes = []; }, 400);
+}
+
+// ── COLLISION / PUSH ──
+function checkCollisions() {
+  eyes.forEach(eye => {
+    const rect = eye.el.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top  + rect.height/2;
+    const dx = mouseX - cx;
+    const dy = mouseY - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const radius = eye.size / 2 + 7;
+
+    if (dist < radius) {
+      triggerReaction(eye, cx, cy);
+    }
+  });
+}
+
+// ── COLLISION CHECK ──
+function checkCollisions() {
+  eyes.forEach(eye => {
+    const rect = eye.el.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top  + rect.height/2;
+    const dx = mouseX - cx;
+    const dy = mouseY - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const radius = eye.size / 2 + 7;
+    if (dist < radius) {
+      triggerReaction(eye, cx, cy);
+    }
+  });
+}
+
+// ── REACTIONS ──
+function triggerReaction(eye, cx, cy) {
+  if (eye.reacting) return;
+  eye.reacting = true;
+  setTimeout(() => { eye.reacting = false; }, 700);
+
+  eye.angry = Math.min(eye.angry + 1, 3);
+
+  const roll = Math.random();
+  if (roll < 0.25) reactCry(eye, cx, cy);
+  else if (roll < 0.5) reactAngry(eye);
+  else if (roll < 0.75) reactOuch(eye, cx, cy);
+  else reactRunaway(eye);
+
+  // Always show ouch word
+  showOuchWord(cx, cy);
+}
+
+function reactCry(eye, cx, cy) {
+  eye.el.classList.add('shaking');
+  setTimeout(() => eye.el.classList.remove('shaking'), 500);
+
+  // spawn tears
+  for (let t = 0; t < 3 + Math.floor(Math.random()*4); t++) {
+    setTimeout(() => {
+      const tear = document.createElement('div');
+      tear.className = 'tear';
+      const tw = 4 + Math.random()*4;
+      const th = tw * (1.5 + Math.random());
+      tear.style.cssText = `width:${tw}px;height:${th}px;left:${cx - tw/2 + rnd(-eye.size*0.25, eye.size*0.25)}px;top:${cy + eye.size*0.3}px;animation-duration:${0.6+Math.random()*0.5}s;`;
+      document.body.appendChild(tear);
+      setTimeout(() => tear.remove(), 1200);
+    }, t * 80);
+  }
+}
+
+function reactAngry(eye) {
+  eye.el.classList.add('angry');
+  eye.el.classList.add('shaking');
+  // add veins
+  for (let v = 0; v < 4; v++) {
+    const vein = document.createElement('div');
+    vein.className = 'vein';
+    const vlen = rnd(8, 18);
+    const angle = rnd(0, 360);
+    const vx = rnd(10, eye.size - 10);
+    const vy = rnd(10, eye.size - 10);
+    vein.style.cssText = `width:${vlen}px;height:2px;left:${vx}px;top:${vy}px;transform:rotate(${angle}deg);`;
+    eye.outer.appendChild(vein);
+  }
+  setTimeout(() => {
+    eye.el.classList.remove('shaking');
+    if (eye.angry < 2) {
+      eye.el.classList.remove('angry');
+      eye.outer.querySelectorAll('.vein').forEach(v => v.remove());
+    }
+  }, 600);
+}
+
+function reactOuch(eye, cx, cy) {
+  eye.el.classList.add('shaking');
+  setTimeout(() => eye.el.classList.remove('shaking'), 500);
+  // squint
+  const lids = eye.el.querySelectorAll('.eyelid');
+  lids[0].style.top = '-20%';
+  lids[1].style.bottom = '-20%';
+  setTimeout(() => {
+    lids[0].style.top = '-60%';
+    lids[1].style.bottom = '-60%';
+  }, 400);
+}
+
+function reactRunaway(eye) {
+  const W = window.innerWidth, H = window.innerHeight;
+  // Run away from mouse
+  const rect = eye.el.getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+  const dx = cx - mouseX;
+  const dy = cy - mouseY;
+  const angle = Math.atan2(dy, dx);
+  const dist = rnd(100, 200);
+  let nx = cx + Math.cos(angle) * dist;
+  let ny = cy + Math.sin(angle) * dist;
+  nx = Math.max(eye.size/2, Math.min(W - eye.size/2, nx));
+  ny = Math.max(eye.size/2, Math.min(H - eye.size/2, ny));
+
+  eye.el.classList.add('running');
+  eye.el.style.left = (nx - eye.size/2) + 'px';
+  eye.el.style.top  = (ny - eye.size/2) + 'px';
+  eye.x = nx; eye.y = ny;
+  setTimeout(() => eye.el.classList.remove('running'), 600);
+}
+
+function showOuchWord(cx, cy) {
+  const word = OUCH_WORDS[Math.floor(Math.random()*OUCH_WORDS.length)];
+  const label = document.createElement('div');
+  label.className = 'ouch-label';
+  label.textContent = word;
+  label.style.left = (cx - 30 + rnd(-20,20)) + 'px';
+  label.style.top  = (cy - 10) + 'px';
+  document.body.appendChild(label);
+  setTimeout(() => label.remove(), 950);
+}
+
+// ── EYE TRACKING ANIMATION ──
+function animate() {
+  if (lightsOn) {
+    eyes.forEach(eye => {
+      const rect = eye.el.getBoundingClientRect();
+      const cx = rect.left + rect.width/2;
+      const cy = rect.top  + rect.height/2;
+      const dx = mouseX - cx;
+      const dy = mouseY - cy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      const maxTravel = (eye.size - eye.eyeballSize) / 2 * 0.72;
+      const travel = Math.min(dist/120, 1) * maxTravel;
+      const angle = Math.atan2(dy, dx);
+      const tx = Math.cos(angle) * travel;
+      const ty = Math.sin(angle) * travel;
+      eye.eyeball.style.transform = `translate(${tx}px, ${ty}px)`;
+
+      // Surprised when near
+      if (dist < eye.size * 1.4) {
+        const scale = 1 + (1 - dist/(eye.size*1.4)) * 0.22;
+        eye.el.style.transform = `scale(${scale})`;
+      } else {
+        eye.el.style.transform = 'scale(1)';
+      }
+    });
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+// ── IDLE TWITCH ──
+setInterval(() => {
+  if (!lightsOn) return;
+  eyes.forEach(eye => {
+    if (Math.random() < 0.05) {
+      const rx = rnd(-5,5), ry = rnd(-5,5);
+      eye.el.style.marginLeft = rx + 'px';
+      eye.el.style.marginTop  = ry + 'px';
+      setTimeout(() => {
+        eye.el.style.marginLeft = '0';
+        eye.el.style.marginTop  = '0';
+      }, 250);
+    }
+  });
+}, 900);
+
+// move switch click to plate only
+document.getElementById('switch-plate').addEventListener('click', () => {
+  lightsOn = !lightsOn;
+  body.classList.toggle('lights-on', lightsOn);
+  if (lightsOn) {
+    spawnEyes();
+    setTimeout(placeSwitch, 800);
+  } else {
+    destroyEyes();
+    setTimeout(placeSwitch, 400);
+  }
+});
+</script>
+</body>
+</html>
