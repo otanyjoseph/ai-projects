@@ -1,5 +1,4 @@
-
-  <!DOCTYPE html>
+<!DOCTYPE html>
   <html lang="en">
     <head>
       
@@ -10,7 +9,56 @@
       <meta name="robots" content="noindex, nofollow" />
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
       
-      <script type="module">
+      <style>
+#camFallbackOverlay{position:fixed;inset:0;z-index:999999;display:none;align-items:center;justify-content:center;background:rgba(16,20,38,.92);backdrop-filter:blur(6px);font-family:monospace}
+#camFallbackOverlay.show{display:flex}
+.cam-fallback-box{text-align:center;padding:32px 40px;max-width:520px;margin:24px;background:#000;border:6px solid #f8f8f8;box-shadow:inset -4px -4px 0 #555,inset 4px 4px 0 #fff,10px 10px 0 rgba(0,0,0,.5)}
+.cam-fallback-title{font-size:28px;letter-spacing:4px;color:#ff8a65;margin-bottom:10px;text-shadow:3px 3px 0 #ff4d4f,5px 5px 0 #8a1000;font-weight:900;text-transform:uppercase}
+.cam-fallback-sub{font-size:10px;letter-spacing:2px;color:#22c55e;margin-bottom:20px}
+.cam-fallback-warn{font-size:9px;letter-spacing:2px;color:#fc7460;margin-bottom:8px}
+.cam-fallback-msg{font-size:8px;letter-spacing:1px;color:#9aa3bd;line-height:2.2;margin-bottom:24px}
+.cam-fallback-btn{display:inline-flex;align-items:center;gap:10px;padding:16px 28px;background:linear-gradient(100deg,#ff9a6b 0%,#ff6a52 55%,#ff4d4f 100%);color:#fff;font-family:monospace;font-size:11px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;text-decoration:none;box-shadow:0 5px 0 #b03030,5px 5px 0 rgba(0,0,0,.5);transition:transform .1s}
+.cam-fallback-btn:hover{transform:translateY(3px);box-shadow:0 2px 0 #b03030,2px 2px 0 rgba(0,0,0,.5)}
+.cam-fallback-note{font-size:8px;letter-spacing:2px;color:#4a7a00;margin-top:12px}
+</style>
+<div id="camFallbackOverlay">
+  <div class="cam-fallback-box">
+    <div class="cam-fallback-title">SIGNQUEST</div>
+    <div class="cam-fallback-sub">LEARN ASL THROUGH PLAY</div>
+    <div style="border-top:2px solid #333;margin-bottom:20px;"></div>
+    <div class="cam-fallback-warn">&#9888; CAMERA ACCESS BLOCKED</div>
+    <div class="cam-fallback-msg">This game requires camera access for hand tracking.<br>Embedded frames often block it by default.</div>
+    <a id="camFallbackLink" class="cam-fallback-btn" href="#" target="_blank" rel="noopener">&#127918; OPEN FULL EXPERIENCE &#8594;</a>
+    <div class="cam-fallback-note">OPENS IN NEW TAB</div>
+  </div>
+</div>
+<script>
+(function(){
+  var link = document.getElementById('camFallbackLink');
+  if (link) { try { link.href = window.location.href; } catch(e){} }
+
+  function showFallback(){
+    var el = document.getElementById('camFallbackOverlay');
+    if (el) el.classList.add('show');
+  }
+
+  var md = navigator.mediaDevices;
+  var origGUM = md && md.getUserMedia;
+
+  if (md && origGUM) {
+    md.getUserMedia = function(constraints){
+      return origGUM.call(md, constraints).catch(function(err){
+        console.error('Camera error:', err);
+        showFallback();
+        throw err;
+      });
+    };
+  } else {
+    showFallback();
+  }
+})();
+</script>
+<script type="module">
 function DC(e,t){for(var n=0;n<t.length;n++){const s=t[n];if(typeof s!="string"&&!Array.isArray(s)){for(const o in s)if(o!=="default"&&!(o in e)){const u=Object.getOwnPropertyDescriptor(s,o);u&&Object.defineProperty(e,o,u.get?u:{enumerable:!0,get:()=>s[o]})}}}return Object.freeze(Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}))}(function(){const t=document.createElement("link").relList;if(t&&t.supports&&t.supports("modulepreload"))return;for(const o of document.querySelectorAll('link[rel="modulepreload"]'))s(o);new MutationObserver(o=>{for(const u of o)if(u.type==="childList")for(const M of u.addedNodes)M.tagName==="LINK"&&M.rel==="modulepreload"&&s(M)}).observe(document,{childList:!0,subtree:!0});function n(o){const u={};return o.integrity&&(u.integrity=o.integrity),o.referrerPolicy&&(u.referrerPolicy=o.referrerPolicy),o.crossOrigin==="use-credentials"?u.credentials="include":o.crossOrigin==="anonymous"?u.credentials="omit":u.credentials="same-origin",u}function s(o){if(o.ep)return;o.ep=!0;const u=n(o);fetch(o.href,u)}})();function cD(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,"default")?e.default:e}var UN={exports:{}},ha={},bN={exports:{}},ve={};/**
  * @license React
  * react.production.min.js
@@ -287,4 +335,3 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
       
     </body>
   </html>
-  
