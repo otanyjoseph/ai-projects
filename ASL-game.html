@@ -10,26 +10,26 @@
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
       
       <style>
-#camFallbackOverlay{position:fixed;inset:0;z-index:999999;display:none;align-items:center;justify-content:center;background:rgba(16,20,38,.92);backdrop-filter:blur(6px);font-family:monospace}
+#camFallbackOverlay{position:fixed;inset:0;z-index:999999;display:none;align-items:center;justify-content:center;background:rgba(31,45,85,.45);backdrop-filter:blur(6px);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 #camFallbackOverlay.show{display:flex}
-.cam-fallback-box{text-align:center;padding:32px 40px;max-width:520px;margin:24px;background:#000;border:6px solid #f8f8f8;box-shadow:inset -4px -4px 0 #555,inset 4px 4px 0 #fff,10px 10px 0 rgba(0,0,0,.5)}
-.cam-fallback-title{font-size:28px;letter-spacing:4px;color:#ff8a65;margin-bottom:10px;text-shadow:3px 3px 0 #ff4d4f,5px 5px 0 #8a1000;font-weight:900;text-transform:uppercase}
-.cam-fallback-sub{font-size:10px;letter-spacing:2px;color:#22c55e;margin-bottom:20px}
-.cam-fallback-warn{font-size:9px;letter-spacing:2px;color:#fc7460;margin-bottom:8px}
-.cam-fallback-msg{font-size:8px;letter-spacing:1px;color:#9aa3bd;line-height:2.2;margin-bottom:24px}
-.cam-fallback-btn{display:inline-flex;align-items:center;gap:10px;padding:16px 28px;background:linear-gradient(100deg,#ff9a6b 0%,#ff6a52 55%,#ff4d4f 100%);color:#fff;font-family:monospace;font-size:11px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;text-decoration:none;box-shadow:0 5px 0 #b03030,5px 5px 0 rgba(0,0,0,.5);transition:transform .1s}
-.cam-fallback-btn:hover{transform:translateY(3px);box-shadow:0 2px 0 #b03030,2px 2px 0 rgba(0,0,0,.5)}
-.cam-fallback-note{font-size:8px;letter-spacing:2px;color:#4a7a00;margin-top:12px}
+.cam-fallback-box{text-align:center;padding:36px 32px;max-width:420px;margin:24px;background:var(--sq-surface-strong,#fff);border:1px solid var(--sq-border,rgba(31,45,85,.12));border-radius:20px;box-shadow:var(--sq-elev-1,0 10px 24px rgba(31,45,85,.14),0 2px 5px rgba(31,45,85,.08))}
+.cam-fallback-title{font-size:1.5rem;letter-spacing:.01em;color:var(--sq-text,#1f2d55);margin-bottom:4px;font-weight:750}
+.cam-fallback-sub{font-size:.72rem;letter-spacing:.08em;font-weight:650;color:var(--sq-text-muted,#8b93ab);margin-bottom:20px;text-transform:uppercase}
+.cam-fallback-warn{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:650;color:var(--sq-coral,#ff6a52);background:rgba(255,138,101,.1);border:1px solid rgba(255,108,83,.3);border-radius:999px;padding:6px 14px;margin-bottom:14px}
+.cam-fallback-msg{font-size:.85rem;line-height:1.5;color:var(--sq-text-2,#5a6a8c);margin-bottom:24px}
+.cam-fallback-btn{display:inline-flex;align-items:center;gap:8px;padding:13px 26px;border:1px solid rgba(255,77,79,.35);border-radius:12px;background:linear-gradient(100deg,#ff9a6b 0%,#ff6a52 55%,#ff4d4f 100%);color:#fff;font-family:inherit;font-size:.9rem;font-weight:650;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -3px 8px rgba(176,32,32,.22),0 10px 24px rgba(255,77,79,.32),0 2px 5px rgba(255,77,79,.24);transition:filter .15s,transform .1s}
+.cam-fallback-btn:hover{filter:brightness(1.04)}
+.cam-fallback-btn:active{transform:scale(.98)}
+.cam-fallback-note{font-size:.72rem;letter-spacing:.04em;color:var(--sq-text-muted,#8b93ab);margin-top:14px}
 </style>
 <div id="camFallbackOverlay">
   <div class="cam-fallback-box">
-    <div class="cam-fallback-title">SIGNQUEST</div>
-    <div class="cam-fallback-sub">LEARN ASL THROUGH PLAY</div>
-    <div style="border-top:2px solid #333;margin-bottom:20px;"></div>
-    <div class="cam-fallback-warn">&#9888; CAMERA ACCESS BLOCKED</div>
-    <div class="cam-fallback-msg">This game requires camera access for hand tracking.<br>Embedded frames often block it by default.</div>
-    <a id="camFallbackLink" class="cam-fallback-btn" href="#" target="_blank" rel="noopener">&#127918; OPEN FULL EXPERIENCE &#8594;</a>
-    <div class="cam-fallback-note">OPENS IN NEW TAB</div>
+    <div class="cam-fallback-title">SignQuest</div>
+    <div class="cam-fallback-sub">Learn ASL through play</div>
+    <div class="cam-fallback-warn">&#128247; Camera access blocked</div>
+    <div class="cam-fallback-msg">This game needs camera access for hand tracking.<br>Embedded frames often block it by default &mdash; open the full experience to continue.</div>
+    <a id="camFallbackLink" class="cam-fallback-btn" href="#" target="_blank" rel="noopener">Open full experience &#8594;</a>
+    <div class="cam-fallback-note">Opens in a new tab</div>
   </div>
 </div>
 <script>
